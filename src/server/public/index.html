@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- MANDATORY: Declare support for both light and dark themes -->
+  <meta name="color-scheme" content="light dark">
+  <title>Tredye Flow Alerts — Order-Flow &amp; Order-Block Reminder Desk</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script type="module">
+    if (!("popover" in HTMLElement.prototype)) {
+      import("https://unpkg.com/@oddbird/popover-polyfill@latest/dist/popover.min.js");
+    }
+  </script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand-group">
+      <div class="brand-mark" aria-hidden="true">⚡</div>
+      <div>
+        <div class="brand-title-row">
+          <h1 class="brand-title">Tredye Flow Alerts</h1>
+          <span id="sourceBadge" class="badge badge-neutral">Connecting…</span>
+          <span id="marketBadge" class="badge badge-neutral">NSE —</span>
+        </div>
+        <p class="brand-subtitle">
+          Strongest NSE Order Flows · Unmitigated Buy &amp; Sell Order Blocks · Manual Review Reminders Only
+        </p>
+      </div>
+    </div>
+
+    <div class="topbar-actions">
+      <div class="poll-meta" id="pollMeta">Last sync: —</div>
+      <div class="zoom-control-group" role="group" aria-label="Screen zoom and density">
+        <button type="button" id="zoomOutBtn" class="btn btn-xs" title="Zoom out to fit more on a big screen">−</button>
+        <button type="button" id="zoomResetBtn" class="btn btn-xs" title="Reset zoom to 100%">100%</button>
+        <button type="button" id="zoomInBtn" class="btn btn-xs" title="Zoom in">+</button>
+      </div>
+      <button type="button" id="pollNowBtn" class="btn btn-secondary" title="Fetch fresh order flow now">
+        ↻ Sync Now
+      </button>
+      <button type="button" id="testNotifyBtn" class="btn btn-secondary" title="Send a real macOS / Telegram test notification">
+        🔔 Test Alert
+      </button>
+      <button type="button" id="openCredentialsBtn" class="btn btn-secondary">
+        🔑 Tredye Login
+      </button>
+      <button type="button" id="openSettingsBtn" class="btn btn-primary">
+        ⚙ Rules &amp; Filters
+      </button>
+    </div>
+  </header>
+
+  <!-- Connection / Auth Banner when running in Demo Replay or Auth Error -->
+  <section id="connectionBanner" class="conn-banner hidden" aria-live="polite">
+    <div class="conn-banner-text">
+      <strong id="connBannerTitle">Demo Replay Active</strong>
+      <span id="connBannerDesc">
+        Showing realistic NSE Order-Flow + Order-Block replay data. Add your Tredye email &amp; password (or session cookie) to stream live `/api/orderflow` data.
+      </span>
+    </div>
+    <div class="conn-banner-actions">
+      <button type="button" id="bannerConnectBtn" class="btn btn-primary btn-sm">Connect Tredye Account</button>
+      <a href="https://www.tredye.com/pulse/?view=orderflow" target="_blank" rel="noopener" class="btn btn-ghost btn-sm">
+        Open Tredye Order Flow ↗
+      </a>
+    </div>
+  </section>
+
+  <!-- Sector Rupee Flow Ribbon -->
+  <section class="sector-strip-wrap" aria-label="Sector net order flow">
+    <div class="sector-strip-label">Sector ₹ Flow:</div>
+    <div id="sectorRibbon" class="sector-ribbon"></div>
+  </section>
+
+  <main class="workspace-grid">
+    <!-- Left / Center: My Stock Tracker + Top Strongest Bullish (BUY) & Bearish (SELL) Flows + OB Inspector -->
+    <div class="main-column">
+      <!-- NEW: MY STOCK TRACKER (Step-Back / Sell Reminder -> Tredye Buy at Right Time) -->
+      <section class="panel tracker-panel" aria-labelledby="trackerHeading">
+        <div class="panel-header tracker-header">
+          <div>
+            <h2 id="trackerHeading" class="panel-title">
+              📌 My Stock Tracker — Sell / Step-Back Reminder &amp; Tredye Buy-at-Right-Time
+            </h2>
+            <p class="panel-desc">
+              <strong>Step 1 (Sell Watch):</strong> Add stocks you hold so Tredye alerts you when Bearish Order Flow or a Supply OB says to <em>take a step back / sell</em>.
+              <strong>Step 2 (Buy Watch):</strong> Flip to <em>Tredye Buy at Right Time</em> so it alerts you when price pulls into a Bullish OB with buyers returning.
+            </p>
+          </div>
+          <div class="tracker-badges">
+            <span id="trackerSellCountBadge" class="badge badge-down">0 Sell Watch</span>
+            <span id="trackerBuyCountBadge" class="badge badge-up">0 Buy Watch</span>
+          </div>
+        </div>
+
+        <!-- Add / Update Stock in My Tracker Form -->
+        <form id="trackerAddForm" class="tracker-add-form">
+          <div class="tf-field">
+            <label for="trSymbol">Stock Symbol</label>
+            <input
+              type="text"
+              id="trSymbol"
+              name="symbol"
+              list="symbolSuggestions"
+              placeholder="e.g. RELIANCE, TATAMOTORS"
+              required
+              autocomplete="off"
+              class="input input-sm"
+            >
+            <datalist id="symbolSuggestions"></datalist>
+          </div>
+
+          <div class="tf-field">
+            <label for="trMode">Tracker Goal</label>
+            <select id="trMode" name="mode" class="input input-sm">
+              <option value="SELL_WATCH" selected>🛑 Sell / Step-Back Reminder (Holding)</option>
+              <option value="BUY_WATCH">🎯 Buy at Right Time (Waiting for Tredye OB)</option>
+            </select>
+          </div>
+
+          <div class="tf-field">
+            <label for="trEntryPrice">My Buy Price ₹ (opt)</label>
+            <input type="number" id="trEntryPrice" name="entryPrice" step="0.05" placeholder="e.g. 2890" class="input input-sm">
+          </div>
+
+          <div class="tf-field">
+            <label for="trTargetPrice">Target Sell / Buy ₹ (opt)</label>
+            <input type="number" id="trTargetPrice" name="targetPrice" step="0.05" placeholder="Auto OB or ₹" class="input input-sm">
+          </div>
+
+          <div class="tf-field">
+            <label for="trStopPrice">Step-Back Floor ₹ (opt)</label>
+            <input type="number" id="trStopPrice" name="stopPrice" step="0.05" placeholder="Stop / Floor ₹" class="input input-sm">
+          </div>
+
+          <div class="tf-field tf-note">
+            <label for="trNotes">Note (opt)</label>
+            <input type="text" id="trNotes" name="notes" placeholder="e.g. Trim half on Bearish OB" class="input input-sm">
+          </div>
+
+          <div class="tf-submit">
+            <button type="submit" class="btn btn-primary btn-sm">+ Add to Tracker</button>
+          </div>
+        </form>
+
+        <!-- Tracked Stocks Cards Grid -->
+        <div id="trackerList" class="tracker-cards-grid"></div>
+      </section>
+
+      <div class="flows-split">
+        <!-- Strongest Bullish Flows (BUY OB Setups) -->
+        <section class="panel panel-bull" aria-labelledby="bullHeading">
+          <div class="panel-header">
+            <div>
+              <h2 id="bullHeading" class="panel-title text-up">
+                ▲ Strongest Bullish Flows — BUY Order Blocks
+              </h2>
+              <p class="panel-desc">Ranked by confluence (LTP&gt;VWAP, LTP&gt;POC, Buy%&gt;50, CVD&gt;0, Depth Imb&gt;0) &amp; nearest Bullish OB</p>
+            </div>
+            <span id="bullCountBadge" class="badge badge-up">Top 5</span>
+          </div>
+          <div id="topBullList" class="flow-card-list"></div>
+        </section>
+
+        <!-- Strongest Bearish Flows (SELL OB Setups) -->
+        <section class="panel panel-bear" aria-labelledby="bearHeading">
+          <div class="panel-header">
+            <div>
+              <h2 id="bearHeading" class="panel-title text-down">
+                ▼ Strongest Bearish Flows — SELL Order Blocks
+              </h2>
+              <p class="panel-desc">Ranked by bearish confluence &amp; nearest unmitigated Bearish OB supply zone above LTP</p>
+            </div>
+            <span id="bearCountBadge" class="badge badge-down">Top 5</span>
+          </div>
+          <div id="topBearList" class="flow-card-list"></div>
+        </section>
+      </div>
+
+      <!-- Interactive Order-Block & Candle Chart Inspector -->
+      <section id="inspectorPanel" class="panel inspector-panel" aria-labelledby="inspectorTitle">
+        <div class="panel-header inspector-header">
+          <div class="inspector-title-wrap">
+            <h2 id="inspectorTitle" class="panel-title">Select a stock to inspect its Order Blocks &amp; Candles</h2>
+            <p id="inspectorSub" class="panel-desc">Click any stock card above or alert on the right to view 3-minute candles, Bullish/Bearish Order Blocks, Volume Profile &amp; CVD.</p>
+          </div>
+          <div id="inspectorQuickActions" class="inspector-actions"></div>
+        </div>
+
+        <div id="inspectorBody" class="inspector-body">
+          <div class="empty-state">Loading Order-Block inspector…</div>
+        </div>
+      </section>
+    </div>
+
+    <!-- Right Column: Active Reminders + Live Alert Feed -->
+    <aside class="side-column">
+      <!-- Scheduled Reminders Queue -->
+      <section class="panel reminders-panel" aria-labelledby="remindersHeading">
+        <div class="panel-header">
+          <div>
+            <h2 id="remindersHeading" class="panel-title">⏰ Scheduled Reminders</h2>
+            <p class="panel-desc">Re-checks live flow &amp; OB validity when timer expires</p>
+          </div>
+          <span id="reminderCountBadge" class="badge badge-neutral">0 pending</span>
+        </div>
+
+        <!-- Quick custom reminder form -->
+        <form id="quickReminderForm" class="quick-reminder-form">
+          <input
+            type="text"
+            id="quickReminderSymbol"
+            name="symbol"
+            placeholder="Symbol (e.g. RELIANCE)"
+            required
+            autocomplete="off"
+            class="input input-sm"
+          >
+          <select id="quickReminderMin" name="minutes" class="input input-sm" aria-label="Reminder minutes">
+            <option value="5">in 5 min</option>
+            <option value="15" selected>in 15 min</option>
+            <option value="30">in 30 min</option>
+            <option value="60">in 60 min</option>
+          </select>
+          <button type="submit" class="btn btn-primary btn-sm">+ Remind</button>
+        </form>
+
+        <div id="pendingRemindersList" class="reminders-list"></div>
+      </section>
+
+      <!-- Live Alert Feed -->
+      <section class="panel alerts-panel" aria-labelledby="alertsHeading">
+        <div class="panel-header">
+          <div>
+            <h2 id="alertsHeading" class="panel-title">🔔 Order-Flow &amp; OB Alerts</h2>
+            <p class="panel-desc">Review prompts only — you decide whether to take the trade</p>
+          </div>
+          <button type="button" id="markAllReviewedBtn" class="btn btn-ghost btn-xs">
+            ✓ Mark all read
+          </button>
+        </div>
+
+        <div class="filter-tabs" role="tablist" aria-label="Filter alerts">
+          <button type="button" class="tab-btn active" data-filter="ALL">All</button>
+          <button type="button" class="tab-btn" data-filter="TRACKER">📌 My Tracker</button>
+          <button type="button" class="tab-btn" data-filter="IN_ZONE">🎯 In OB Zone</button>
+          <button type="button" class="tab-btn" data-filter="APPROACHING_OB">⚡ Near OB</button>
+          <button type="button" class="tab-btn" data-filter="NEW_STRONG_FLOW">🔥 Top Flow</button>
+          <button type="button" class="tab-btn" data-filter="REMINDER_DUE">⏰ Reminders</button>
+        </div>
+
+        <div id="alertsFeed" class="alerts-feed"></div>
+      </section>
+    </aside>
+  </main>
+
+  <!-- Modal 1: Tredye Account & Telegram Credentials (with light-dismiss closedby="any") -->
+  <dialog id="credentialsDialog" closedby="any" aria-labelledby="credDialogTitle" class="modal-dialog">
+    <form id="credentialsForm" method="dialog" class="modal-content">
+      <div class="modal-header">
+        <h2 id="credDialogTitle">🔑 Connect Tredye &amp; Telegram</h2>
+        <button type="button" class="btn btn-ghost btn-sm" data-close-dialog="credentialsDialog" aria-label="Close dialog">✕</button>
+      </div>
+      <p class="modal-help">
+        Stored locally in <code>.env</code> on your Mac and never sent anywhere except Tredye's login endpoint (or Telegram if configured).
+      </p>
+
+      <div class="form-grid">
+        <label class="form-field">
+          <span>Tredye Email / Username</span>
+          <input type="text" id="credEmail" name="email" placeholder="you@example.com" autocomplete="username" class="input">
+        </label>
+        <label class="form-field">
+          <span>Tredye Password</span>
+          <input type="password" id="credPassword" name="password" placeholder="••••••••" autocomplete="current-password" class="input">
+        </label>
+        <label class="form-field full-width">
+          <span>Or Browser Session Cookie (optional — use if you sign in with Google)</span>
+          <input type="text" id="credCookie" name="cookie" placeholder="Paste Cookie header from DevTools Network -> /api/orderflow" class="input">
+        </label>
+        <hr class="form-divider full-width">
+        <label class="form-field">
+          <span>Telegram Bot Token (optional, for phone notifications)</span>
+          <input type="password" id="credTgToken" name="telegramBotToken" placeholder="123456:ABC-DEF..." class="input">
+        </label>
+        <label class="form-field">
+          <span>Telegram Chat ID (optional)</span>
+          <input type="text" id="credTgChat" name="telegramChatId" placeholder="e.g. 987654321" class="input">
+        </label>
+      </div>
+
+      <div id="credStatusMsg" class="modal-status"></div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-close-dialog="credentialsDialog">Cancel</button>
+        <button type="submit" id="saveCredBtn" class="btn btn-primary">Save &amp; Connect Live</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Modal 2: Signal Rules & Thresholds Settings (with light-dismiss closedby="any") -->
+  <dialog id="settingsDialog" closedby="any" aria-labelledby="settingsDialogTitle" class="modal-dialog">
+    <form id="settingsForm" method="dialog" class="modal-content">
+      <div class="modal-header">
+        <h2 id="settingsDialogTitle">⚙ Flow &amp; Order-Block Alert Rules</h2>
+        <button type="button" class="btn btn-ghost btn-sm" data-close-dialog="settingsDialog" aria-label="Close dialog">✕</button>
+      </div>
+
+      <div class="form-grid">
+        <label class="form-field">
+          <span>Check Frequency (seconds, 15–300s)</span>
+          <input type="number" id="cfgPollInterval" min="15" max="300" step="5" class="input">
+        </label>
+        <label class="form-field">
+          <span>Top-N Stocks per Side (BULL &amp; BEAR)</span>
+          <input type="number" id="cfgTopN" min="1" max="15" step="1" class="input">
+        </label>
+        <label class="form-field">
+          <span>Minimum Signal Agreement (out of 5)</span>
+          <input type="number" id="cfgMinAgree" min="1" max="5" step="1" class="input">
+        </label>
+        <label class="form-field">
+          <span>Order Block Proximity Alert (%)</span>
+          <input type="number" id="cfgObProx" min="0.05" max="5" step="0.05" class="input">
+        </label>
+        <label class="form-field">
+          <span>Repeat Alert Cooldown (minutes)</span>
+          <input type="number" id="cfgCooldown" min="1" max="240" step="1" class="input">
+        </label>
+        <label class="form-field">
+          <span>Consecutive Polls to Confirm Flow</span>
+          <input type="number" id="cfgConfirmPolls" min="1" max="5" step="1" class="input">
+        </label>
+        <label class="form-field">
+          <span>Minimum Stock Price (₹)</span>
+          <input type="number" id="cfgMinPrice" min="0" step="10" class="input">
+        </label>
+        <label class="form-field full-width">
+          <span>Watchlist Filter (comma-separated symbols, or leave blank for all NSE F&amp;O stocks)</span>
+          <input type="text" id="cfgWatchlist" placeholder="e.g. RELIANCE, ICICIBANK, TATAMOTORS" class="input">
+        </label>
+        <label class="form-field full-width">
+          <span>Ignore Symbols (comma-separated)</span>
+          <input type="text" id="cfgIgnore" placeholder="e.g. IDEA, YESBANK" class="input">
+        </label>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-close-dialog="settingsDialog">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save Rules</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Top-layer manual Popover Toast Container -->
+  <div id="toastStack" class="toast-stack" aria-live="polite"></div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
+

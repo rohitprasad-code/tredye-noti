@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.tredye.alerts</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/node</string>
+    <string>--no-warnings</string>
+    <string>/Users/rohitprasad/Backup/tredye-noti/src/index.js</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/rohitprasad/Backup/tredye-noti</string>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>/Users/rohitprasad/Backup/tredye-noti/data/service.out.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>/Users/rohitprasad/Backup/tredye-noti/data/service.err.log</string>
+</dict>
+</plist>
+

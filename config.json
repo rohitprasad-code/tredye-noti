@@ -1,0 +1,16 @@
+{
+  "pollIntervalSec": 60,
+  "topN": 5,
+  "minAgree": 4,
+  "confirmPolls": 2,
+  "obProximityPct": 0.5,
+  "cooldownMinutes": 20,
+  "minPrice": 0,
+  "sectors": [],
+  "watchlist": [],
+  "ignoreSymbols": [],
+  "soundOnInZone": true,
+  "soundOnApproach": true,
+  "openSummaryAlert": true
+}
+
