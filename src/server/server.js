@@ -204,9 +204,45 @@ function createDashboardServer(appController) {
         return sendJson(res, 200, { ok: true, tracker: appController.state.tracker });
       }
 
-      // Static files
+      // Investment & Trade Journal Booklet CRUD endpoints (/api/journal)
+      if (req.method === 'GET' && pathname === '/api/journal') {
+        const jState = appController.getJournalState();
+        return sendJson(res, 200, { ok: true, ...jState });
+      }
+
+      if (req.method === 'POST' && pathname === '/api/journal') {
+        const body = await readBody(req);
+        if (!body.symbol) {
+          return sendJson(res, 400, { error: 'symbol is required' });
+        }
+        const resJ = await appController.createJournalItem(body);
+        return sendJson(res, 200, { ok: true, ...resJ });
+      }
+
+      if ((req.method === 'PUT' || req.method === 'POST') && /^\/api\/journal\/\d+$/.test(pathname)) {
+        const id = Number(pathname.slice('/api/journal/'.length));
+        const body = await readBody(req);
+        const resJ = await appController.updateJournalItem(id, body);
+        return sendJson(res, 200, { ok: true, ...resJ });
+      }
+
+      if (req.method === 'DELETE' && /^\/api\/journal\/\d+$/.test(pathname)) {
+        const id = Number(pathname.slice('/api/journal/'.length));
+        const resJ = appController.deleteJournalItem(id);
+        return sendJson(res, 200, { ok: true, ...resJ });
+      }
+
+      // Static files & clean SPA routes (/app/orderblock, /orderblock, /app/journal, /journal)
       if (req.method === 'GET' || req.method === 'HEAD') {
-        const relPath = pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, '');
+        const cleanPathname = pathname.replace(/\/+$/, '') || '/';
+        const relPath =
+          cleanPathname === '/' || cleanPathname === '/app'
+            ? 'index.html'
+            : cleanPathname === '/orderblock' || cleanPathname === '/app/orderblock'
+            ? 'orderblock.html'
+            : cleanPathname === '/journal' || cleanPathname === '/app/journal'
+            ? 'journal.html'
+            : pathname.replace(/^\/+/, '');
         const safePath = path.normalize(path.join(PUBLIC_DIR, relPath));
         if (!safePath.startsWith(PUBLIC_DIR)) {
           res.writeHead(403);

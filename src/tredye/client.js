@@ -16,6 +16,7 @@ class TredyeClient {
     this.password = options.password || process.env.TREDYE_PASSWORD || '';
     this.manualCookie = (options.cookie || process.env.TREDYE_COOKIE || '').trim();
     this.cookieFile = options.cookieFile || path.join(process.cwd(), '.session-cookie');
+    this.snapshotFile = options.snapshotFile || path.join(process.cwd(), 'data', 'last-live-snapshot.json');
     this.cookieJar = new Map(); // name -> value
     this.backoffUntilMs = 0;
     this.authenticatedUser = null;
@@ -232,6 +233,17 @@ class TredyeClient {
     return res.json();
   }
 
+  loadCachedSnapshot() {
+    try {
+      if (fs.existsSync(this.snapshotFile)) {
+        return JSON.parse(fs.readFileSync(this.snapshotFile, 'utf8'));
+      }
+    } catch {
+      // ignore
+    }
+    return null;
+  }
+
   async fetchOrderFlow() {
     if (!this.getCookieHeader() && this.email && this.password) {
       try {
@@ -266,6 +278,11 @@ class TredyeClient {
       this.lastError = null;
       return ofData;
     } catch (v2Err) {
+      const cached = this.loadCachedSnapshot();
+      if (cached?.orderflow?.stocks?.length) {
+        this.lastError = null;
+        return cached.orderflow;
+      }
       // Fallback to legacy v1 endpoint
       return this.requestJson('/api/orderflow');
     }
@@ -276,6 +293,10 @@ class TredyeClient {
     try {
       return await this.fetchDataFeed(`orderflow_p${shardId}.json`);
     } catch {
+      const cached = this.loadCachedSnapshot();
+      if (cached?.shards?.[shardId]) {
+        return cached.shards[shardId];
+      }
       return this.requestJson(`/api/orderflow/p${shardId}`);
     }
   }

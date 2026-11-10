@@ -90,6 +90,28 @@ class FlowStore {
       );
 
       CREATE INDEX IF NOT EXISTS idx_tracker_mode ON tracker_positions(mode, updated_at DESC);
+
+      CREATE TABLE IF NOT EXISTS journal_entries (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        symbol TEXT NOT NULL,
+        side TEXT NOT NULL DEFAULT 'LONG',
+        status TEXT NOT NULL DEFAULT 'OPEN',
+        qty REAL NOT NULL DEFAULT 1,
+        entry_price REAL NOT NULL,
+        exit_price REAL,
+        stop_price REAL,
+        target_price REAL,
+        ob_zone TEXT,
+        setup_type TEXT,
+        thesis TEXT,
+        lessons TEXT,
+        rating INTEGER DEFAULT 5,
+        entry_at INTEGER NOT NULL,
+        closed_at INTEGER,
+        updated_at INTEGER NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_journal_status ON journal_entries(status, entry_at DESC);
     `);
   }
 
@@ -410,6 +432,142 @@ class FlowStore {
       lastVerdict: r.last_verdict,
       lastAlertAt: r.last_alert_at,
       createdAt: r.created_at,
+      updatedAt: r.updated_at,
+    };
+  }
+
+  createJournalEntry({
+    symbol,
+    side = 'LONG',
+    status = 'OPEN',
+    qty = 1,
+    entryPrice,
+    exitPrice = null,
+    stopPrice = null,
+    targetPrice = null,
+    obZone = null,
+    setupType = 'Order Block Pullback',
+    thesis = null,
+    lessons = null,
+    rating = 5,
+    entryAt = Date.now(),
+    closedAt = null,
+    nowMs = Date.now(),
+  }) {
+    const sym = String(symbol || '').trim().toUpperCase();
+    if (!sym) throw new Error('symbol is required');
+    const cleanSide = String(side || 'LONG').toUpperCase() === 'SHORT' ? 'SHORT' : 'LONG';
+    const cleanStatus = ['OPEN', 'CLOSED', 'WATCHLIST'].includes(String(status || '').toUpperCase())
+      ? String(status).toUpperCase()
+      : 'OPEN';
+    const numOrNull = v => (v === '' || v === null || v === undefined || Number.isNaN(Number(v)) ? null : Number(v));
+    const q = Math.max(0.01, Number(qty) || 1);
+    const ep = Number(entryPrice) || 0;
+
+    const res = this.db
+      .prepare(`
+        INSERT INTO journal_entries (
+          symbol, side, status, qty, entry_price, exit_price, stop_price, target_price,
+          ob_zone, setup_type, thesis, lessons, rating, entry_at, closed_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `)
+      .run(
+        sym,
+        cleanSide,
+        cleanStatus,
+        q,
+        ep,
+        numOrNull(exitPrice),
+        numOrNull(stopPrice),
+        numOrNull(targetPrice),
+        obZone ? String(obZone).trim() : null,
+        setupType ? String(setupType).trim() : 'Order Block Pullback',
+        thesis ? String(thesis).trim() : null,
+        lessons ? String(lessons).trim() : null,
+        Math.max(1, Math.min(5, Number(rating) || 5)),
+        Number(entryAt) || nowMs,
+        cleanStatus === 'CLOSED' ? Number(closedAt) || nowMs : numOrNull(closedAt),
+        nowMs
+      );
+
+    return this.getJournalEntry(Number(res.lastInsertRowid));
+  }
+
+  updateJournalEntry(id, patch = {}, nowMs = Date.now()) {
+    const existing = this.getJournalEntry(id);
+    if (!existing) throw new Error(`Journal entry #${id} not found`);
+    const numOrNull = v => (v === '' || v === null || v === undefined || Number.isNaN(Number(v)) ? null : Number(v));
+
+    const status = patch.status ? String(patch.status).toUpperCase() : existing.status;
+    const exitPrice = patch.exitPrice !== undefined ? numOrNull(patch.exitPrice) : existing.exitPrice;
+    const stopPrice = patch.stopPrice !== undefined ? numOrNull(patch.stopPrice) : existing.stopPrice;
+    const targetPrice = patch.targetPrice !== undefined ? numOrNull(patch.targetPrice) : existing.targetPrice;
+    const qty = patch.qty !== undefined ? Math.max(0.01, Number(patch.qty) || existing.qty) : existing.qty;
+    const entryPrice = patch.entryPrice !== undefined ? Number(patch.entryPrice) || existing.entryPrice : existing.entryPrice;
+    const thesis = patch.thesis !== undefined ? (patch.thesis ? String(patch.thesis).trim() : null) : existing.thesis;
+    const lessons = patch.lessons !== undefined ? (patch.lessons ? String(patch.lessons).trim() : null) : existing.lessons;
+    const setupType = patch.setupType !== undefined ? String(patch.setupType).trim() : existing.setupType;
+    const rating = patch.rating !== undefined ? Math.max(1, Math.min(5, Number(patch.rating) || 5)) : existing.rating;
+    const closedAt = status === 'CLOSED' ? existing.closedAt || nowMs : null;
+
+    this.db
+      .prepare(`
+        UPDATE journal_entries
+        SET status = ?, qty = ?, entry_price = ?, exit_price = ?, stop_price = ?, target_price = ?,
+            setup_type = ?, thesis = ?, lessons = ?, rating = ?, closed_at = ?, updated_at = ?
+        WHERE id = ?
+      `)
+      .run(
+        status,
+        qty,
+        entryPrice,
+        exitPrice,
+        stopPrice,
+        targetPrice,
+        setupType,
+        thesis,
+        lessons,
+        rating,
+        closedAt,
+        nowMs,
+        Number(id)
+      );
+
+    return this.getJournalEntry(id);
+  }
+
+  deleteJournalEntry(id) {
+    this.db.prepare(`DELETE FROM journal_entries WHERE id = ?`).run(Number(id));
+  }
+
+  getJournalEntry(id) {
+    const r = this.db.prepare(`SELECT * FROM journal_entries WHERE id = ?`).get(Number(id));
+    return r ? this._mapJournalRow(r) : null;
+  }
+
+  listJournalEntries() {
+    const rows = this.db.prepare(`SELECT * FROM journal_entries ORDER BY CASE WHEN status = 'OPEN' THEN 0 ELSE 1 END, entry_at DESC`).all();
+    return rows.map(r => this._mapJournalRow(r));
+  }
+
+  _mapJournalRow(r) {
+    return {
+      id: r.id,
+      symbol: r.symbol,
+      side: r.side,
+      status: r.status,
+      qty: r.qty,
+      entryPrice: r.entry_price,
+      exitPrice: r.exit_price,
+      stopPrice: r.stop_price,
+      targetPrice: r.target_price,
+      obZone: r.ob_zone,
+      setupType: r.setup_type,
+      thesis: r.thesis,
+      lessons: r.lessons,
+      rating: r.rating,
+      entryAt: r.entry_at,
+      closedAt: r.closed_at,
       updatedAt: r.updated_at,
     };
   }

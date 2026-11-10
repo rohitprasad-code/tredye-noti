@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tredye OrderBlock &amp; All-218-Stocks Real-Time Flow Observatory — /app/orderblock</title>
+  <link rel="stylesheet" href="/orderblock.css">
+</head>
+<body>
+  <div class="hud-shell">
+    <!-- Left Vertical Navigation Rail (matches screenshot) -->
+    <aside class="hud-rail" aria-label="Primary navigation">
+      <div class="rail-top">
+        <a href="/app/orderblock" class="rail-logo" title="Tredye OrderBlock Observatory (/app/orderblock)">
+          <span class="logo-bar bar-up"></span>
+          <span class="logo-bar bar-mid"></span>
+          <span class="logo-bar bar-dn"></span>
+        </a>
+        <button type="button" id="toggleAnimBtn" class="rail-btn active" title="Pause / Resume stream particle motion">»</button>
+        <a href="/" class="rail-btn" title="Open Alert &amp; My Stock Tracker Desk (/)">⌂</a>
+        <a href="/app/orderblock" class="rail-btn active" title="OrderBlock &amp; All-218-Stocks Observatory (/app/orderblock)">⟁</a>
+        <a href="/app/journal" class="rail-btn" title="Open Investment &amp; Trade Journal Booklet (/app/journal)">📖</a>
+        <button type="button" id="toggleHoverPopupBtn" class="rail-btn active" title="Toggle Floating Hover Chart Magnifier">◉</button>
+        <button type="button" id="quickRemindActiveBtn" class="rail-btn" title="Set 15m Reminder on active stock">🔔</button>
+        <button type="button" id="quickTrackActiveBtn" class="rail-btn" title="Add active stock to My Tracker">📌</button>
+      </div>
+      <div class="rail-bottom">
+        <button type="button" id="pinLockBtn" class="rail-btn lock-pill" title="Lock / Unlock current hovered stock (or click any stock)">🔒</button>
+        <span class="rail-dot" id="liveConnDot" title="Live connection status"></span>
+        <div class="rail-theme-pill" title="Cyber-HUD Dark Mode Active">
+          <span>☀</span>
+          <span class="active">☾</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Full-Screen Observatory Canvas & All-218-Stocks Screener -->
+    <div class="hud-main">
+      <!-- Single Merged Top Bar: Search (⌘K) | Sector Filter | (All / Bullish / Bearish) | Sort | Live Status -->
+      <header class="hud-topbar" aria-label="Search, sector filter, side mode, and sort controls">
+        <div class="topbar-left">
+          <div class="search-box-wrap">
+            <span class="search-icon">🔍</span>
+            <input
+              type="search"
+              id="hudSearchInput"
+              class="hud-search-input"
+              placeholder="Search stocks, sectors, or buildup…"
+              autocomplete="off"
+            >
+            <kbd class="search-kbd">⌘K</kbd>
+            <div id="searchDropdown" class="search-dropdown hidden"></div>
+          </div>
+
+          <div class="ob-filter-group">
+            <label for="sectorSelect" class="ob-filter-lbl">SECTOR</label>
+            <select id="sectorSelect" class="ob-select">
+              <option value="ALL">All Sectors (218)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="ob-mode-pills" role="group" aria-label="Filter by All, Bullish, or Bearish">
+          <button type="button" class="ob-pill active" data-filter-mode="ALL">All <span id="countAllBadge" class="pill-cnt">218</span></button>
+          <button type="button" class="ob-pill bull-pill" data-filter-mode="BULL">🟢 Bullish <span id="countBullBadge" class="pill-cnt">0</span></button>
+          <button type="button" class="ob-pill bear-pill" data-filter-mode="BEAR">🔴 Bearish <span id="countBearBadge" class="pill-cnt">0</span></button>
+        </div>
+
+        <div class="hud-top-actions">
+          <div class="ob-filter-group">
+            <label for="sortOrderSelect" class="ob-filter-lbl">SORT</label>
+            <select id="sortOrderSelect" class="ob-select">
+              <option value="FLOW_SCORE">⚡ Strongest Flow</option>
+              <option value="OB_STRENGTH">🧱 Strongest Order Block</option>
+            </select>
+          </div>
+          <span id="hudSyncMeta" class="hud-meta-pill">● LIVE 218 F&amp;O</span>
+          <button type="button" id="obSyncNowBtn" class="hud-mini-btn" title="Sync fresh order flow">↻ Sync</button>
+          <a href="#allStocksSection" class="hud-mini-btn accent" title="Jump to All-218-Stocks Real-Time Screener">
+            ⬇ All 218 Stocks
+          </a>
+        </div>
+      </header>
+
+      <!-- 3-Column Cyber-HUD Stage (Left Stream Sankey | Middle 4x4 Bull & Bear Matrix | Right 3+3 Live OB Charts) -->
+      <main class="ob-stage" id="obStage">
+        <!-- Full-stage connector SVG overlay for glowing neural curves between columns -->
+        <svg id="stageOverlaySvg" class="stage-overlay-svg" aria-hidden="true"></svg>
+
+        <!-- COLUMN 1: Left Sector & Particle Order-Flow Stream Observatory -->
+        <section class="ob-col-stream" aria-label="Sector and market order flow streams">
+          <!-- Top Intraday Bull/Bear Delta Wave Histogram (matches top-left of screenshot) -->
+          <div class="wave-header">
+            <svg id="intradayWaveSvg" class="intraday-wave-svg" viewBox="0 0 460 56" preserveAspectRatio="none"></svg>
+            <div class="wave-counters">
+              <div class="wave-stat up">▲ BULLISH <strong id="bullCountStat">0</strong></div>
+              <div class="wave-stat dn">▼ BEARISH <strong id="bearCountStat">0</strong></div>
+            </div>
+          </div>
+
+          <div class="stream-body" id="streamBody">
+            <!-- Left Vertical Bull/Bear Balance Spine -->
+            <div class="left-balance-bar">
+              <div class="lb-half lb-bull" id="lbBullBar"></div>
+              <div class="lb-node"></div>
+              <div class="lb-half lb-bear" id="lbBearBar"></div>
+            </div>
+
+            <!-- High-DPI Animated Bezier Stream + Volume Spine Canvas -->
+            <canvas id="flowStreamCanvas" class="flow-stream-canvas"></canvas>
+
+            <!-- Interactive Sector Nodes Overlay (Top Bullish Sectors / Bottom Bearish Sectors) -->
+            <div id="sectorNodesTop" class="sector-nodes-stack top"></div>
+            <div id="sectorNodesBottom" class="sector-nodes-stack bottom"></div>
+
+            <!-- Central Spine Brackets (matches glowing [ ] brackets on vertical spine in screenshot) -->
+            <div class="spine-bracket bull-bracket" id="spineBullBracket" title="Bullish Inflow Spine Concentration">
+              <span class="sb-label" id="spineBullVal">+0 Cr</span>
+            </div>
+            <div class="spine-bracket bear-bracket" id="spineBearBracket" title="Bearish Outflow Spine Concentration">
+              <span class="sb-label" id="spineBearVal">-0 Cr</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- COLUMN 2: Middle 4-Column Bullish (Top) & Bearish (Bottom) Stock Matrix -->
+        <section class="ob-col-matrix" aria-label="Top Bullish and Bearish stock flow matrix">
+          <!-- Top Bullish 4x4 Grid -->
+          <div class="matrix-half bull" id="bullMatrix"></div>
+
+          <!-- Glowing Center Horizon Divider with Nexus Orb -->
+          <div class="matrix-horizon">
+            <div class="horizon-line"></div>
+            <div class="horizon-orb" title="Bull / Bear Equilibrium Nexus"></div>
+          </div>
+
+          <!-- Bottom Bearish 4x4 Grid -->
+          <div class="matrix-half bear" id="bearMatrix"></div>
+        </section>
+
+        <!-- COLUMN 3: Right Live Order-Block Chart Stack (3 Bullish on Top + 3 Bearish on Bottom) -->
+        <section class="ob-col-charts" aria-label="Live Order Block and Support/Resistance Charts">
+          <div class="charts-half bull" id="bullChartsStack"></div>
+          <div class="charts-half bear" id="bearChartsStack"></div>
+        </section>
+      </main>
+
+      <!-- ALL-218-STOCKS REAL-TIME ORDER-BLOCK & FLOW SCREENER -->
+      <section class="all-stocks-section" id="allStocksSection" aria-labelledby="screenerTitle">
+        <div class="screener-header">
+          <div class="screener-title-group">
+            <h2 id="screenerTitle" class="screener-title">
+              ⚡ Real-Time All-Stocks Order-Block &amp; Flow Screener
+              <span id="screenerResultCount" class="screener-count-badge">218 stocks</span>
+            </h2>
+            <p class="screener-subtitle" id="screenerFilterSummary">
+              Tracking every NSE F&amp;O stock in real time · Hover any row or tile to inspect its live 3-minute Order Block chart · Click 💼 Booklet to log an investment
+            </p>
+          </div>
+
+          <div class="screener-view-controls">
+            <button type="button" id="resetFiltersBtn" class="hud-mini-btn">✕ Reset Filters</button>
+            <div class="hud-zoom-group" role="group" aria-label="Screener layout mode">
+              <button type="button" id="viewModeTableBtn" class="hud-mini-btn active" data-view-mode="TABLE">📊 Table View</button>
+              <button type="button" id="viewModeGridBtn" class="hud-mini-btn" data-view-mode="GRID">🎛 Tile Grid View</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="screener-workspace">
+          <!-- Left: All 218 Stocks Responsive Table or Tile Grid -->
+          <div class="screener-list-col">
+            <!-- Responsive Table Wrapper (modern-web-guidance responsive-table pattern) -->
+            <div id="screenerTableWrapper" tabindex="0" role="region" aria-labelledby="screenerTitle" class="table-wrapper">
+              <table class="ob-screener-table">
+                <caption class="sr-only">Real-time NSE F&amp;O Order-Flow and Order-Block Screener</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Stock &amp; Sector</th>
+                    <th scope="col" class="num">LTP &amp; Chg</th>
+                    <th scope="col">Flow &amp; Buildup</th>
+                    <th scope="col" class="num">Buy / Delta</th>
+                    <th scope="col">Primary Order Block</th>
+                    <th scope="col" class="num">Block Impulse</th>
+                    <th scope="col" class="num">OB Distance</th>
+                    <th scope="col" class="num">S1 / R1 / R:R</th>
+                    <th scope="col">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="screenerTableBody"></tbody>
+              </table>
+            </div>
+
+            <!-- Alternative Compact Cyber-Tile Grid for All 218 Stocks -->
+            <div id="screenerGridContainer" class="screener-tile-grid hidden"></div>
+          </div>
+
+          <!-- Right Sticky Live Chart Inspector Dock (updates instantaneously as you hover down all 218 stocks) -->
+          <aside class="screener-sticky-inspector" aria-label="Sticky Live 3-Minute Order Block Chart Inspector">
+            <div class="ssi-header">
+              <span class="ssi-badge">◉ LIVE HOVER INSPECTOR</span>
+              <span class="ssi-hint">Hover any stock on the left</span>
+            </div>
+            <div id="stickyInspectorBody"></div>
+          </aside>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <!-- Floating Hover Live Chart Magnifier (shows live chart right next to cursor when hovering left/middle items) -->
+  <aside id="hoverChartPopover" class="hover-chart-popover hidden" aria-live="polite"></aside>
+
+  <!-- Toast notification stack -->
+  <div id="obToastStack" class="ob-toast-stack" aria-live="polite"></div>
+
+  <script src="/orderblock.js"></script>
+</body>
+</html>

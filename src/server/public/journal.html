@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark light">
+  <title>Tredye Investment &amp; Trade Journal Booklet — /app/journal</title>
+  <link rel="stylesheet" href="/journal.css">
+</head>
+<body>
+  <div class="booklet-shell">
+    <!-- Top Header -->
+    <header class="booklet-topbar">
+      <div class="brand-wrap">
+        <div class="booklet-icon" aria-hidden="true">📖</div>
+        <div>
+          <div class="title-row">
+            <h1 class="booklet-title">Investment &amp; Trade Booklet</h1>
+            <span id="liveSourceBadge" class="badge badge-up">● LIVE TREDYE SYNC</span>
+          </div>
+          <p class="booklet-subtitle">
+            Personal Portfolio Ledger · Where You Invested, Thesis, Order-Block Zones &amp; Live Tredye Flow Health
+          </p>
+        </div>
+      </div>
+
+      <div class="topbar-actions">
+        <div class="zoom-group" role="group" aria-label="Zoom controls">
+          <button type="button" id="jZoomOut" class="btn btn-xs" title="Zoom out">−</button>
+          <button type="button" id="jZoomReset" class="btn btn-xs" title="Reset zoom">100%</button>
+          <button type="button" id="jZoomIn" class="btn btn-xs" title="Zoom in">+</button>
+        </div>
+        <button type="button" id="newEntryBtn" class="btn btn-gold">➕ Log New Investment</button>
+        <a href="/app/orderblock" class="btn btn-primary">🌌 OrderBlock HUD (218)</a>
+        <a href="/" class="btn btn-secondary">⚡ Alert &amp; Tracker Desk</a>
+      </div>
+    </header>
+
+    <!-- Portfolio & Booklet Executive KPI Strip -->
+    <section class="kpi-strip" aria-label="Portfolio and investment summary">
+      <article class="kpi-card">
+        <span class="kpi-lbl">OPEN INVESTED CAPITAL</span>
+        <strong class="kpi-val" id="kpiInvested">₹0</strong>
+        <span class="kpi-sub" id="kpiOpenCount">0 active holdings</span>
+      </article>
+
+      <article class="kpi-card">
+        <span class="kpi-lbl">CURRENT LIVE VALUE</span>
+        <strong class="kpi-val" id="kpiCurrentValue">₹0</strong>
+        <span class="kpi-sub" id="kpiAvgReturn">Live Tredye LTP mark-to-market</span>
+      </article>
+
+      <article class="kpi-card">
+        <span class="kpi-lbl">UNREALIZED OPEN P&amp;L</span>
+        <strong class="kpi-val" id="kpiOpenPnl">₹0 (0.00%)</strong>
+        <span class="kpi-sub" id="kpiBestPerformer">Across open positions</span>
+      </article>
+
+      <article class="kpi-card">
+        <span class="kpi-lbl">REALIZED CLOSED P&amp;L</span>
+        <strong class="kpi-val" id="kpiClosedPnl">₹0</strong>
+        <span class="kpi-sub" id="kpiWinRate">Win rate: —</span>
+      </article>
+
+      <article class="kpi-card">
+        <span class="kpi-lbl">LIVE FLOW HEALTH ALERTS</span>
+        <strong class="kpi-val" id="kpiAtRiskCount">0</strong>
+        <span class="kpi-sub" id="kpiAtRiskSub">Holdings with Bear Flow Flip / Stop risk</span>
+      </article>
+    </section>
+
+    <!-- Sector Allocation Strip -->
+    <section class="allocation-bar-card" aria-label="Capital allocation by sector">
+      <div class="alloc-head">
+        <span class="alloc-title">📊 WHERE I INVESTED — SECTOR ALLOCATION</span>
+        <span class="alloc-hint">Click any sector pill to filter your booklet</span>
+      </div>
+      <div id="sectorAllocPills" class="sector-alloc-pills"></div>
+    </section>
+
+    <!-- Filter & Search Bar -->
+    <section class="booklet-filter-bar" aria-label="Filter journal entries">
+      <div class="status-tabs" role="tablist">
+        <button type="button" class="tab-pill active" data-status-filter="ALL">All Entries <span id="tabCntAll" class="cnt">0</span></button>
+        <button type="button" class="tab-pill" data-status-filter="OPEN">🟢 Open Holdings <span id="tabCntOpen" class="cnt">0</span></button>
+        <button type="button" class="tab-pill" data-status-filter="CLOSED">🏁 Closed Ledger <span id="tabCntClosed" class="cnt">0</span></button>
+        <button type="button" class="tab-pill warn-tab" data-status-filter="AT_RISK">⚠️ Flow Warning / Stop Risk <span id="tabCntRisk" class="cnt">0</span></button>
+      </div>
+
+      <div class="filter-right">
+        <input
+          type="search"
+          id="journalSearchInput"
+          class="j-search-input"
+          placeholder="Search symbol, sector, setup, or thesis notes…"
+        >
+        <select id="journalSortSelect" class="j-select" aria-label="Sort booklet entries">
+          <option value="NEWEST">Order: Newest First</option>
+          <option value="CAPITAL_DESC">Order: Largest Invested Capital</option>
+          <option value="PNL_DESC">Order: Highest P&amp;L (₹)</option>
+          <option value="PNL_ASC">Order: Lowest P&amp;L (₹)</option>
+          <option value="FLOW_SCORE">Order: Strongest Live Flow</option>
+        </select>
+      </div>
+    </section>
+
+    <!-- Main 2-Column Booklet Workspace -->
+    <main class="booklet-workspace">
+      <!-- Left Column: Booklet Cards + Responsive Ledger Table -->
+      <div class="booklet-left-col">
+        <!-- Booklet Cards Grid -->
+        <section aria-labelledby="cardsHeading">
+          <div class="sec-head-row">
+            <h2 id="cardsHeading" class="sec-heading">📖 Investment Booklet Pages (Hover any card for Live Order-Block Chart)</h2>
+          </div>
+          <div id="bookletCardsGrid" class="booklet-cards-grid"></div>
+        </section>
+
+        <!-- Full Portfolio Ledger Table (modern-web-guidance responsive-table pattern) -->
+        <section aria-labelledby="ledgerHeading" style="margin-top: 1rem;">
+          <div class="sec-head-row">
+            <h2 id="ledgerHeading" class="sec-heading">📊 Complete Investment &amp; Trade Ledger Table</h2>
+          </div>
+          <div tabindex="0" role="region" aria-labelledby="ledgerHeading" class="table-wrapper">
+            <table class="ledger-table">
+              <caption class="sr-only">Personal investment and trade ledger with live Tredye order flow health</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Stock &amp; Date</th>
+                  <th scope="col">Status &amp; Setup</th>
+                  <th scope="col" class="num">Qty &amp; Entry</th>
+                  <th scope="col" class="num">Invested ₹</th>
+                  <th scope="col" class="num">Live LTP / Exit</th>
+                  <th scope="col" class="num">P&amp;L (₹ / %)</th>
+                  <th scope="col" class="num">Stop / Target / R</th>
+                  <th scope="col">Live Tredye Flow Verdict</th>
+                  <th scope="col">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="ledgerTableBody"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+
+      <!-- Right Sticky Column: Live 3-Minute Order-Block + Entry/Stop/Target Chart + Booklet Form -->
+      <aside class="booklet-right-col">
+        <!-- Live Hover Chart Card with Entry / Stop / Target Overlay -->
+        <section class="inspector-card" aria-label="Live 3-Minute Order Block and Position Chart">
+          <div class="insp-header">
+            <div>
+              <span class="insp-kicker">◉ LIVE TREDYE 3M ORDER-BLOCK CHART</span>
+              <h3 class="insp-title" id="inspSymbolTitle">Hover any investment</h3>
+            </div>
+            <span id="inspVerdictBadge" class="verdict-pill neutral">—</span>
+          </div>
+
+          <div id="inspChartContainer" class="insp-chart-container"></div>
+
+          <div id="inspMetaRow" class="insp-meta-grid"></div>
+        </section>
+
+        <!-- Add / Edit Investment Booklet Entry Form -->
+        <section class="entry-form-card" id="entryFormCard" aria-labelledby="formHeading">
+          <div class="form-head">
+            <h3 id="formHeading" class="form-title">➕ Log Investment / Trade in Booklet</h3>
+            <button type="button" id="resetFormBtn" class="btn btn-xs">Clear / New</button>
+          </div>
+
+          <form id="journalForm" class="journal-form">
+            <input type="hidden" id="entryIdInput" value="">
+
+            <div class="form-row-3">
+              <div class="field">
+                <label for="fSymbol">Symbol (NSE)</label>
+                <input type="text" id="fSymbol" list="fSymbolList" placeholder="e.g. RELIANCE" required autocomplete="off">
+                <datalist id="fSymbolList"></datalist>
+              </div>
+              <div class="field">
+                <label for="fSide">Direction</label>
+                <select id="fSide">
+                  <option value="BUY">BUY (Long)</option>
+                  <option value="SELL">SELL (Short)</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="fStatus">Status</label>
+                <select id="fStatus">
+                  <option value="OPEN">OPEN (Holding)</option>
+                  <option value="CLOSED">CLOSED (Booked)</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-row-3">
+              <div class="field">
+                <label for="fQty">Quantity (Shares)</label>
+                <input type="number" id="fQty" step="1" min="1" value="25" required>
+              </div>
+              <div class="field">
+                <label for="fEntryPrice">Entry Price (₹)</label>
+                <input type="number" id="fEntryPrice" step="0.05" placeholder="Auto LTP" required>
+              </div>
+              <div class="field">
+                <label for="fExitPrice">Exit Price (₹ if Closed)</label>
+                <input type="number" id="fExitPrice" step="0.05" placeholder="Optional">
+              </div>
+            </div>
+
+            <div class="form-row-3">
+              <div class="field">
+                <label for="fStopPrice">Stop Loss Floor (₹)</label>
+                <input type="number" id="fStopPrice" step="0.05" placeholder="Below Bull OB">
+              </div>
+              <div class="field">
+                <label for="fTargetPrice">Target Price (₹)</label>
+                <input type="number" id="fTargetPrice" step="0.05" placeholder="Resistance R1/R2">
+              </div>
+              <div class="field">
+                <label for="fRating">Conviction (1–5 ★)</label>
+                <select id="fRating">
+                  <option value="5">★★★★★ (5/5 A+)</option>
+                  <option value="4">★★★★☆ (4/5 Strong)</option>
+                  <option value="3">★★★☆☆ (3/5 Standard)</option>
+                  <option value="2">★★☆☆☆ (2/5 Tactical)</option>
+                  <option value="1">★☆☆☆☆ (1/5 Probe)</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-row-2">
+              <div class="field">
+                <label for="fSetupType">Setup / Strategy</label>
+                <input type="text" id="fSetupType" placeholder="e.g. Bull OB Pullback + 5/5 Flow" value="Bull OB Pullback + Strong Flow">
+              </div>
+              <div class="field">
+                <label for="fObZone">Order Block Zone</label>
+                <input type="text" id="fObZone" placeholder="Auto-filled from live Tredye OB">
+              </div>
+            </div>
+
+            <div class="field">
+              <label for="fThesis">Investment Thesis ("Why I Invested &amp; Plan")</label>
+              <textarea id="fThesis" rows="2" placeholder="Why did you enter? Sector strength, 5/5 order flow, unmitigated Order Block zone…"></textarea>
+            </div>
+
+            <div class="field">
+              <label for="fLessons">Post-Trade Review / Booklet Notes</label>
+              <textarea id="fLessons" rows="2" placeholder="Trail stop notes, partial booking, or lessons learned…"></textarea>
+            </div>
+
+            <label class="checkbox-row">
+              <input type="checkbox" id="fSyncTracker" checked>
+              <span>Also sync to <strong>My Stock Tracker (Sell / Step-Back Watch)</strong> for automatic macOS alerts if flow flips</span>
+            </label>
+
+            <div class="form-actions">
+              <button type="submit" id="saveEntryBtn" class="btn btn-gold" style="flex:1;">💾 Save to Investment Booklet</button>
+            </div>
+          </form>
+        </section>
+      </aside>
+    </main>
+  </div>
+
+  <div id="jToastStack" class="toast-stack" aria-live="polite"></div>
+
+  <script src="/journal.js"></script>
+</body>
+</html>
