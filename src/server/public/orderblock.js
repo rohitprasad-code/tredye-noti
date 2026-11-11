@@ -10,7 +10,7 @@
   let hoveredSector = null;
   let selectedSector = 'ALL';
   let filterMode = 'ALL'; // ALL | BULL | BEAR
-  let sortOrder = 'MAX_GAINS'; // MAX_GAINS (Max Gains / Bulls & Bears) | FLOW_SCORE (Strongest Flow) | OB_STRENGTH (Strongest Order Block)
+  let sortOrder = 'MAX_GAINS'; // MAX_GAINS (Max Gains / Bulls & Bears) | FLOW_SCORE (Strongest Flow)
   let searchQuery = '';
   let screenerViewMode = 'TABLE'; // TABLE | GRID
   let stageCollapsed = false;
@@ -418,10 +418,6 @@
     const flow = Math.abs(Number(stock.rupeeFlowCr || 0));
     const obStr = Number(getCardOrderBlockMeta(stock).str || 1.0);
 
-    if (sortOrder === 'OB_STRENGTH') {
-      const mag = obStr * 100 + score * 0.6 + Math.abs(chg) * 8;
-      return isBull ? mag : -mag;
-    }
     if (sortOrder === 'FLOW_SCORE') {
       const mag = score * 2.5 + Math.abs(chg) * 14 + Math.min(80, flow * 0.15);
       return isBull ? mag : -mag;
@@ -949,7 +945,7 @@
       const modeLabel =
         filterMode === 'BULL' ? '🟢 Bullish Only' : filterMode === 'BEAR' ? '🔴 Bearish Only' : 'All Stocks';
       const sortLabel =
-        sortOrder === 'OB_STRENGTH' ? '🧱 Strongest Order Block' : '⚡ Strongest Flow';
+        sortOrder === 'FLOW_SCORE' ? '⚡ Strongest Flow' : '📈 Max Gains / Bulls & Bears';
       const parts = [
         `Sector: ${activeSec || 'All 22 Sectors'}`,
         `View: ${modeLabel}`,
@@ -2092,9 +2088,7 @@
     sortOrder = els.sortOrderSelect.value || 'MAX_GAINS';
     refreshFilteredViews();
     showToast(
-      sortOrder === 'OB_STRENGTH'
-        ? '🧱 Sorted by Strongest Order Block (Top Bulls & Bottom Bears)'
-        : sortOrder === 'FLOW_SCORE'
+      sortOrder === 'FLOW_SCORE'
         ? '⚡ Sorted by Strongest Flow (Top Bulls & Bottom Bears)'
         : '📈 Sorted by Max Gains / Bulls & Bears (Picking top & bottom leaders)'
     );

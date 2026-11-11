@@ -759,12 +759,6 @@ class TredyeFlowService {
       if (sort === 'FLOW_SCORE') {
         return (Number(c.agree || 0) * 28) + (Math.abs(Number(c.rupeeFlowCr || 0)) * 2.5) + (absChg * 6);
       }
-      if (sort === 'OB_STRENGTH') {
-        const ob = isBull ? (c.bestBullOB || c.primaryOB) : (c.bestBearOB || c.primaryOB);
-        const str = Number(ob?.str || 1);
-        const dist = Math.min(10, Math.abs(Number(ob?.distPct ?? 4)));
-        return (str * 35) - (dist * 3.5) + (absChg * 4);
-      }
       // Default: MAX_GAINS (highest % gain for bulls, largest % drop for bears)
       return absChg * 100 + Math.abs(Number(c.rupeeFlowCr || 0)) * 0.1;
     };
