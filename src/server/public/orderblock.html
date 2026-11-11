@@ -3664,13 +3664,16 @@ function buildChips(M, G, root) {
     c.innerHTML = `<div class="r1"><span class="cap">${x.sec}</span><span class="v">${pctStr(x.chg)}</span></div><div class="strip">${strip}</div>`;
     chips.push(c);
   };
-  const ch = S.tier3 ? 24 : 18, pm = ch + 2, lo = G.T0 + 8, hi = G.T1 - 8, nT = top.length, nB = bot.length;
-  const split = clamp(G.yT, lo + ch + 8 + Math.max(0, nT - 1) * pm, hi - 10 - Math.max(0, nB - 1) * pm);
-  const pT = nT > 1 ? Math.min(26, (split - 8 - ch - lo) / (nT - 1)) : 26;
+  const ch = S.tier3 ? 24 : 18, pm = ch + 2, lo = G.T0 + 8, hi = G.T1 - 8, botEnd = hi - ch, nT = top.length, nB = bot.length;
+  const splitMin = lo + ch + 8 + Math.max(0, nT - 1) * pm;
+  const splitMax = botEnd - 10 - Math.max(0, nB - 1) * pm;
+  const split = splitMin <= splitMax ? clamp(G.yT, splitMin, splitMax) : (lo + botEnd) / 2;
+  const pT = nT > 1 ? Math.min(pm, Math.max(14, (split - 8 - ch - lo) / (nT - 1))) : pm;
   top.forEach((x, i) => mk(x, lo + i * pT));
-  let y0 = Math.max(G.yT + 104, split + 10), pitch = Math.max(26, (hi - y0) / Math.max(1, nB - 1));
-  if (y0 + Math.max(0, nB - 1) * 26 > hi) { y0 = Math.max(split + 10, hi - Math.max(0, nB - 1) * 26); pitch = nB > 1 ? (hi - y0) / (nB - 1) : 26; }
-  bot.forEach((x, i) => mk(x, y0 + i * pitch));
+  const botMinY = Math.max(G.yT + 68, split + 10);
+  const y0 = nB > 0 ? Math.max(botMinY, botEnd - Math.max(0, nB - 1) * pm) : botEnd;
+  const pB = nB > 1 ? Math.min(pm, Math.max(14, (botEnd - y0) / (nB - 1))) : pm;
+  bot.forEach((x, i) => mk(x, y0 + i * pB));
   // fit, uniformly across the column (one type size for every chip): label tracking first, then label size;
   // the value never shrinks
   const fit = () => {
