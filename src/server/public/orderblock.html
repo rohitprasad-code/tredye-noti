@@ -208,7 +208,7 @@ canvas.cv{position:absolute;display:block;pointer-events:none}
 
 /* ---------- tickets ---------- */
 .ticket{position:absolute;border-radius:10px;cursor:pointer;
-  background:var(--tbg);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
+  background:var(--tbg);/* backdrop-filter removed for crisp rendering */
   box-shadow:0 22px 44px rgba(0,0,0,.6),0 0 36px rgba(var(--sc),.22),inset 0 1px 0 rgba(255,255,255,.06);
   transition:opacity .14s}
 .ticket.buy{--tbg:radial-gradient(460px 200px at 16% 0%,rgba(25,229,140,.20),transparent 70%),linear-gradient(135deg,rgba(28,86,62,.95),rgba(15,30,36,.95) 70%)}
@@ -1025,34 +1025,7 @@ body.stacked #stack{max-width:none;margin:0;padding:0;-webkit-touch-callout:none
 #stack .phhd .phreplay::after{content:"";position:absolute;left:50%;top:50%;width:44px;height:44px;transform:translate(-50%,-50%)}
 #stack .phhd .phreplay svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
 #stack .phhd .phreplay:active{color:var(--ink);border-color:rgba(169,184,255,.5)}
-/* ---- locked preview (tools/terminal_locked.js): every name and number blurred, the page otherwise as members see it.
-   The name list matches OBL_NAMES there.
-   The glyphs are made transparent and only their blurred shadow is drawn, in the text's own colour (a level's name
-   or a word beside a number stays sharp). The spread is at least 6 px, so even 9 px text can't be read. ---- */
-html.obl :is(.tkr,.tk,.mg,.nm,.nmn,.nms,.ptag b,.chip .cap,.evtxt b,.aid .sub,.phsecb,#inspector .h .t,#inspector .h .n,#sheet .phh .t,#inspector .row>span:not(.k),#sheet .row>span:not(.k),#sheet .qv,ob-n),
-html.obl :is(.tkr,.tk,.mg,.nm,.nmn,.nms,.ptag b,.chip .cap,.evtxt b,.aid .sub,.phsecb,#inspector .h .t,#inspector .h .n,#sheet .phh .t,#inspector .row>span:not(.k),#sheet .row>span:not(.k),#sheet .qv,ob-n) *{
-  -webkit-text-fill-color:transparent!important;
-  text-shadow:0 0 max(.7em,6px) currentColor,0 0 max(.7em,6px) currentColor,0 0 max(.7em,6px) currentColor!important}
-html.obl ob-n{font:inherit;letter-spacing:inherit}
-/* the hero % is gradient-filled text: drawn in its side's colour so its blur has one */
-html.obl .ticket .hero-pc{background:none!important;color:rgb(var(--hi))!important}
-/* the Unlock line under a popup's chart (and Access Locked, when the popup has no chart) */
-html.obl .obl-note{display:flex;align-items:center;gap:calc(5px*var(--tx));margin-top:calc(8px*var(--tx));padding-top:calc(7px*var(--tx));
-  border-top:1px solid rgba(154,168,189,.12);font:600 calc(9px*var(--tx))/1.2 var(--f-ui);letter-spacing:.07em;text-transform:uppercase;color:var(--ink-3);white-space:nowrap}
-html.obl .obl-note svg{width:1.25em;height:1.25em;flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
-html.obl .obl-note a{display:inline-flex;align-items:center;gap:.35em;margin-left:auto;color:#A5A8FF;font-weight:700;letter-spacing:.02em;text-transform:none;text-decoration:none}
-html.obl .obl-note a:hover{text-decoration:underline;text-underline-offset:2px}
-/* the inspector is click-through; once a click pins it, its Unlock link takes the click */
-html.obl #inspector.on .obl-note a{pointer-events:auto;cursor:pointer}
-html.obl #sheet .obl-note{margin:10px 0 2px;padding-top:8px;font-size:10px;gap:6px}
-/* Access Locked in the middle of a popup's chart: a small pill the candles pass behind, never in the way of a touch */
-html.obl .ichart .obl-lock{position:absolute;left:50%;top:50%;z-index:9;transform:translate(-50%,-50%);display:flex;align-items:center;
-  gap:calc(6px*var(--tx));padding:calc(6px*var(--tx)) calc(12px*var(--tx));border-radius:999px;pointer-events:none;
-  background:rgba(10,15,23,.82);box-shadow:0 0 0 1px rgba(154,168,189,.2),0 6px 18px rgba(0,0,0,.35);
-  -webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);
-  font:600 calc(10px*var(--tx))/1.2 var(--f-ui);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2);white-space:nowrap}
-html.obl .obl-lock svg{width:1.25em;height:1.25em;flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
-html.obl #sheet .ichart .obl-lock{gap:6px;padding:6px 12px;font-size:11px}
+/* Locked preview CSS removed to ensure crystal-clear text */
 /* ---- desktop stock search (tools/terminal_find.js): a field above the stage's top-left corner (in the row
    computeScale keeps clear), the matches in a list under it, drawn like the popup. Light colours: terminal_light.html ---- */
 #obFind{position:fixed;left:0;top:0;z-index:45;width:440px;font-family:var(--f-ui);opacity:0;transform:translateY(-3px);
@@ -1335,6 +1308,154 @@ body.stacked .ob-top-bar { display: none; }
 }
 #stage {
   transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease;
+}
+
+
+/* ================= CRISP HIGH-DEF FLOATING HOVER CARD (#inspector) ================= */
+#inspector {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 330px;
+  min-height: 180px;
+  border-radius: 10px;
+  background: rgba(10, 16, 26, 0.97) !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(0, 0, 0, 0.6), 0 0 24px rgba(var(--sc, 25, 229, 140), 0.16) !important;
+  padding: 12px 14px;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(4px) scale(0.985);
+  transition: opacity 0.12s ease;
+  z-index: 100;
+  font-family: var(--f-ui, "Inter Tight", -apple-system, sans-serif);
+  font-size: 11px;
+  color: #C9D4E5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+#inspector.wide {
+  width: 420px;
+}
+#inspector.on {
+  opacity: 1 !important;
+}
+#inspector::before {
+  content: "";
+  position: absolute;
+  background: rgb(var(--sc, 154, 168, 189));
+  box-shadow: 0 0 10px rgba(var(--sc, 154, 168, 189), 0.9);
+  border-radius: 2px;
+  opacity: 0.9;
+}
+#inspector[data-face=r]::before { right: -1px; top: 12px; bottom: 12px; width: 3px; }
+#inspector[data-face=l]::before { left: -1px; top: 12px; bottom: 12px; width: 3px; }
+#inspector[data-face=t]::before { top: -1px; left: 12px; right: 12px; height: 3px; }
+#inspector[data-face=b]::before { bottom: -1px; left: 12px; right: 12px; height: 3px; }
+#inspector .h {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 7px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+#inspector .h .mg {
+  width: 28px;
+  height: 28px;
+  flex: none;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--f-tk);
+  font-weight: 700;
+  font-size: 14px;
+  color: #fff;
+  background: rgba(var(--sc, 154, 168, 189), 0.22);
+  border: 1px solid rgba(var(--sc, 154, 168, 189), 0.55);
+}
+#inspector .h .t {
+  font-family: var(--f-tk);
+  font-weight: 800;
+  font-size: 18px;
+  color: #EEF3FA !important;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  -webkit-text-fill-color: #EEF3FA !important;
+  text-shadow: none !important;
+}
+#inspector .h .n {
+  font-size: 10px;
+  color: #8C9CB2 !important;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  -webkit-text-fill-color: #8C9CB2 !important;
+  text-shadow: none !important;
+}
+#inspector .row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 5px;
+  font-family: var(--f-num);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+#inspector .row .k {
+  font-family: var(--f-ui);
+  font-weight: 600;
+  color: #7A8CA3;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 9.5px;
+}
+#inspector .row.px {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.08);
+}
+#inspector .row.px .lp {
+  color: #EEF3FA !important;
+  font-weight: 700;
+  font-size: 1.18em;
+  -webkit-text-fill-color: #EEF3FA !important;
+  text-shadow: none !important;
+}
+#inspector .row .pp {
+  letter-spacing: 0.5px;
+  font-weight: 700;
+  color: rgb(var(--sc, 154, 168, 189)) !important;
+  -webkit-text-fill-color: rgb(var(--sc, 154, 168, 189)) !important;
+  text-shadow: none !important;
+}
+#inspector canvas.spk {
+  position: absolute;
+  right: 12px;
+  top: 12px;
+  margin: 0;
+}
+#inspector .ichart {
+  margin-top: 10px;
+  position: relative;
+  overflow: hidden;
+  border-radius: 7px;
+  background: rgba(4, 7, 12, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.6);
+}
+#inspector .ichart canvas {
+  margin: 0;
+  display: block;
+}
+#stage {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 </style>
@@ -1815,7 +1936,7 @@ body.stacked .ob-top-bar { display: none; }
 </header>
 
 <div id="atmo" aria-hidden="true"></div>
-<div id="stage" class="pre" aria-label="OBF order-block flow dashboard">
+<div id="stage" aria-label="OBF order-block flow dashboard">
   <div class="L" id="lyBase"></div>
   <div class="L" id="lyLight"></div>
   <div class="L" id="lyHalves"></div>
@@ -4782,13 +4903,11 @@ function setBrush(h, e) {
   const st = $('#stage');
   const same = FX.hover && h && FX.hover.kind === h.kind && FX.hover.sym === h.sym && FX.hover.sec === h.sec && FX.hover.idx === h.idx;
   if (same) {
-    if (e && (!setBrush._last || performance.now() - setBrush._last > 80)) {
-      setBrush._last = performance.now();
-      placeInspector(e);
-    }
+    if (e) placeInspector(e);
     return;
   }
-  FX.hover = h; if (FX.pinned) return;
+  FX.hover = h;
+  if (FX.pinned) return;
   applyBrush(h, e);
 }
 function applyBrush(h, e) {
@@ -4884,66 +5003,35 @@ function spineSamples() {
   SPINE_PTS.G = G; SPINE_PTS.pts = pts; return pts;
 }
 function placeInspector(e) {
-  const i = $('#inspector'); if (!i || !e || !i.classList.contains('on')) return;
-  const [x, y] = toStage(e); const W = i.offsetWidth || 260 * S.tx, H = i.offsetHeight || 170 * S.tx;
-  const M8 = 8, Hd = G.Hd, sym = i._sym;
-  const fit = r => { r.x = clamp(r.x, M8, 1920 - W - M8); r.y = clamp(r.y, M8, Hd - H - M8); r.w = W; r.h = H; return r; };
-  const tkEl = e.target && e.target.closest && e.target.closest('.ticket, .bridge');
-  const tileEl = !tkEl && e.target && e.target.closest && e.target.closest('.tile');
-  const tk = tkEl ? G.ticketBy[tkEl.dataset.k] : null;
-  const T = G.tileBy[sym];
-  const fixedKey = tk ? 'k:' + sym : tileEl && T ? 't:' + sym : null;
-  if (fixedKey && i._fixed === fixedKey + W + 'x' + H) return;         // anchored placements do not follow the cursor
-  const D = { x: 1368 - 6, y: 0, w: 1920, h: Hd };                  // ticket column (+ a hair of air)
-  const cands = [];
-  let pts, anchor, spW = 3;
-  if (tk && !T) {
-    // left of the ticket column, over the dimmed mosaic beside the lit tile; slide vertically off the fibre
-    pts = chainSamples(sym, false);
-    const xr = T ? T.x - 10 - W : 1368 - 10 - W; const ideal = tk.side > 0 ? tk.y : tk.y + tk.h - H;
-    for (let yy = M8; yy <= Hd - H - M8; yy += 6) cands.push({ r: fit({ x: xr, y: yy }), key: 'L' + yy, pref: Math.abs(yy - ideal) });
-    anchor = [tk.x, tk.cy]; spW = 6;
-  } else if ((tk || tileEl) && T) {
-    // around the tile, on the side facing away from its fibre (bull fibres arrive from above-left, bear from below-left)
-    pts = chainSamples(sym, false);
-    const s = M.bySym[sym]; const fy = s ? G.laneY(s.lane) : T.cy; const away = fy < T.cy ? 1 : -1;   // +1: place below
-    // the popup always touches its tile: beside it (level with it) or directly above / below it
-    const g = 10, spots = [];
-    for (const xx of [T.x - g - W, T.x + T.w + g]) for (let yy = T.cy - H + 28; yy <= T.cy - 28; yy += 8) spots.push([xx, yy]);
-    for (const xx of [T.x + T.w - W, T.x, T.x + (T.w - W) / 2]) spots.push([xx, T.y - g - H], [xx, T.y + T.h + g]);
-    for (const [xx, yy] of spots) {
-      const r = fit({ x: xx, y: yy }); const cy = r.y + H / 2;
-      const wrong = away > 0 ? (cy < T.cy ? 40 : 0) : (cy > T.cy ? 40 : 0);
-      const half = (cy - G.yS) * (T.cy - G.yS) < 0 ? 300 : 0;       // stay in the tile's own half (BUY above / SELL below)
-      cands.push({ r, key: 'T' + Math.round(xx) + ':' + Math.round(yy), pref: Math.hypot(r.x + W / 2 - (T.x + T.w / 2), cy - T.cy) * .08 + wrong + half });
-    }
-    anchor = [T.x + T.w / 2, T.cy]; spW = 8;
-  } else {
-    // plume lane / ladder bar: follow the cursor, choose the quadrant that keeps the thread and crosshair clear
-    pts = chainSamples(sym, true, y);
-    const g = 22; [[x + g, y + g], [x + g, y - g - H], [x - g - W, y + g], [x - g - W, y - g - H], [x + g, y - H / 2], [x - g - W, y - H / 2]].forEach((p, k) => cands.push({ r: fit({ x: p[0], y: p[1] }), key: 'Q' + k, pref: k * 2 }));
-    anchor = [x, y];
+  const i = $('#inspector');
+  if (!i || !e || !i.classList.contains('on')) return;
+  const [x, y] = toStage(e);
+  const W = i.offsetWidth || (i.classList.contains('wide') ? 420 : 330);
+  const H = i.offsetHeight || 280;
+  const M8 = 16;
+  const Hd = (G && G.Hd) || 1080;
+
+  // Smooth floating tooltip: directly follows cursor with boundary clamping
+  let px = x + 24;
+  let py = y + 16;
+
+  // Flip to the left if near the right edge
+  if (px + W > 1920 - M8) {
+    px = x - W - 24;
   }
-  const sp = spineSamples();
-  const litTile = T ? { x: T.x - 3, y: T.y - 3, w: T.w + 6, h: T.h + 6 } : null;
-  let best = null;
-  cands.forEach(c => {
-    const r = c.r; let sc = c.pref;
-    sc += rectHits(r, pts, 6) * 60;                                   // covering the lit lineage
-    sc += rectHits(r, sp, 2) * spW;                                    // covering the spine (the reading line)
-    sc += rectOverlap(r, D) * 4;                                       // covering any ticket
-    if (litTile) sc += rectOverlap(r, litTile) * 2;                    // covering the lit tile itself
-    if (!tk && !tileEl) { const cx = clamp(anchor[0], r.x, r.x + W), cy = clamp(anchor[1], r.y, r.y + H); if (cx === anchor[0] && cy === anchor[1]) sc += 1e6; } // never under the cursor
-    if (i._cand && c.key === i._cand) sc -= 40;                        // hysteresis
-    c.sc = sc; if (!best || sc < best.sc) best = c;
-  });
-  if (!best) return;
-  i._cand = best.key; i._fixed = fixedKey ? fixedKey + W + 'x' + H : null;
-  i._at = anchor; i._atG = G;   // the point it answers, on this layout: a pin put back after a re-render answers it again (terminal_find.js)
-  // accent edge faces the thing it describes
-  const cx = best.r.x + W / 2, cy = best.r.y + H / 2;
-  i.dataset.face = Math.abs(anchor[0] - cx) / W > Math.abs(anchor[1] - cy) / H ? (anchor[0] > cx ? 'r' : 'l') : (anchor[1] > cy ? 'b' : 't');
-  css(i, { left: Math.round(best.r.x), top: Math.round(best.r.y) });
+  px = clamp(px, M8, 1920 - W - M8);
+
+  // Flip above if near bottom
+  if (py + H > Hd - M8) {
+    py = y - H - 16;
+  }
+  py = clamp(py, M8, Hd - H - M8);
+
+  i._fixed = null;
+  i._at = [x, y];
+  i._atG = G;
+  css(i, { left: Math.round(px), top: Math.round(py) });
+  i.style.opacity = "1";
 }
 function bindInteractions() {
   const st = $('#stage'); if (st._bound) return; st._bound = true;
@@ -6938,114 +7026,11 @@ function phSweep(now) {
   if (f >= 1) { W.run = null; W.el.style.opacity = '0'; }
 }
 
-/* ================= locked preview: names and numbers blurred (owner request 2026-10-10) =================
-   A visitor without a plan gets the terminal members get, on the sample market (internal/market/sample.go), with
-   every stock name, sector name and number blurred: the build show, the hovers, the pins, the scrolling and the
-   popups run exactly as they do for members, only nothing on the page can be read. Nothing real is there to read
-   either: the sample market is made up (its charts are one textbook session per side), so a blur taken off in
-   DevTools shows only made-up names and numbers. A popup's chart says Access Locked in its middle, with the way to
-   unlock on a small line under it. The server turns this on for the sample frame only (sample.go swaps the feed loader's OB:LOCK slot).
 
-   Names are blurred by class (OBL_NAMES, tools/terminal_locked.css). Numbers are blurred wherever they are: every
-   number in the page's text is wrapped in <ob-n> as it lands (a MutationObserver, so a rebuild or a counter can
-   never show one), and every number drawn on a canvas is drawn blurred. A level's own name stays readable (the S1
-   of "S1 824.80"), and so does every word. Injected by tools/patch_terminal.py inside the main script. */
-const OB_LOCK = !!window.OB_LOCKED;
-// what is blurred whole (and never searched for numbers): names, the inspector's and the sheet's values
-const OBL_NAMES = '.tkr,.tk,.mg,.nm,.nmn,.nms,.ptag b,.chip .cap,.evtxt b,.aid .sub,.phsecb,#inspector .h .t,#inspector .h .n,' +
-  '#sheet .phh .t,#inspector .row>span:not(.k),#sheet .row>span:not(.k),#sheet .qv';
-const OBL_SKIP = 'ob-n,.obl-note,script,style,' + OBL_NAMES;
-// a number: an optional sign, rupee or # and digits with their separators; a letter right before the digits makes a
-// level's name (S1, R2), not a number, unless it is a percentile (p98.3, P99.8)
-const OBL_NUM = /([A-Za-z]?)([+\-−]?[₹#]?\d[\d,.:]*%?)/g;
-
-function oblWrap(t) {
-  const s = t.nodeValue, p = t.parentNode;
-  if (!s || !/\d/.test(s) || !p || p.nodeType !== 1 || p.closest(OBL_SKIP)) return;
-  const at = [];
-  let m;
-  OBL_NUM.lastIndex = 0;
-  while ((m = OBL_NUM.exec(s))) {
-    if (m[1] && !(/[pP]/.test(m[1]) && m[2].indexOf('.') > 0)) continue;
-    at.push([m.index, OBL_NUM.lastIndex]);
-  }
-  if (!at.length) return;
-  // a node that is one number is moved into the wrapper whole, so a counter that rewrites it stays blurred
-  if (at.length === 1 && !s.slice(0, at[0][0]).trim() && !s.slice(at[0][1]).trim()) { const w = document.createElement('ob-n'); p.insertBefore(w, t); w.appendChild(t); return; }
-  for (let i = at.length - 1; i >= 0; i--) {
-    const [a, b] = at[i];
-    const num = t.splitText(a);
-    num.splitText(b - a);
-    const w = document.createElement('ob-n'); p.insertBefore(w, num); w.appendChild(num);
-  }
-}
-function oblScan(n) {
-  if (n.nodeType === 3) { oblWrap(n); return; }
-  if (n.nodeType !== 1 || n.closest('ob-n,.obl-note,script,style')) return;
-  const w = document.createTreeWalker(n, NodeFilter.SHOW_TEXT), list = [];
-  while (w.nextNode()) list.push(w.currentNode);
-  list.forEach(oblWrap);
-}
-/* the price a day the Unlock line quotes: the page around the frame carries it (body[data-locked]) */
-function oblPerDay() { try { return parent.document.body.dataset.locked || ''; } catch (e) { return ''; } }
-/* a popup's lock (the inspector, the phone sheet): Access Locked in the middle of its chart (owner request
-   2026-10-17), the Unlock link on a small line under it. A popup without a chart keeps both on the line. */
-function obLockNote(parent) {
-  if (!OB_LOCK) return;
-  const per = oblPerDay();
-  const n = el('div', 'obl-note', parent);
-  n.innerHTML = '<a href="/checkout" target="_top">' + (per ? 'Unlock for ' + per + ' a day' : 'Unlock full access') + '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>';
-  const lock = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg><span>Access Locked</span>';
-  const box = parent.querySelector('.ichart');
-  if (!box) { n.insertAdjacentHTML('afterbegin', lock); return; }
-  // the chart draws only into an empty box (obInspectorChart), so the label goes in once the chart is there
-  const put = () => el('div', 'obl-lock', box, lock);
-  if (box.firstChild) put();
-  else new MutationObserver((ms, o) => { if (box.firstChild) { o.disconnect(); put(); } }).observe(box, { childList: true });
-}
-if (OB_LOCK) {
-  document.documentElement.classList.add('obl');
-  // numbers in the page's text: wrapped now and whenever text arrives or changes
-  oblScan(document.body);
-  new MutationObserver(ms => {
-    for (const r of ms) {
-      if (r.type === 'characterData') oblWrap(r.target);
-      else r.addedNodes.forEach(oblScan);
-    }
-  }).observe(document.body, { childList: true, subtree: true, characterData: true });
-  // numbers on the canvases (axes, the tile price chip, the VWAP tag): drawn blurred, words as they are
-  const C2 = CanvasRenderingContext2D.prototype, fill = C2.fillText;
-  C2.fillText = function (txt, x, y, mw) {
-    if (!/\d/.test(String(txt))) return fill.apply(this, arguments);
-    const fs = parseFloat((/(\d+(?:\.\d+)?)px/.exec(this.font) || [0, '10'])[1]), k = Math.abs(this.getTransform().a) || 1;
-    const sd = Math.max(3, 0.35 * fs);   // the CSS blur's spread (tools/terminal_locked.css), in px
-    this.save();
-    if (filterOk()) {
-      this.filter = `blur(${(sd * k).toFixed(2)}px)`;   // a canvas filter's blur is in bitmap pixels
-      for (let i = 0; i < 3; i++) fill.call(this, txt, x, y, mw);
-    } else {
-      // no canvas filters: the glyphs go far off the canvas and their shadow lands where they were
-      this.shadowColor = typeof this.fillStyle === 'string' ? this.fillStyle : 'rgba(150,160,180,.8)';
-      this.shadowBlur = 2 * sd * k; this.shadowOffsetX = 5000 * k; this.shadowOffsetY = 0;
-      for (let i = 0; i < 3; i++) fill.call(this, txt, x - 5000, y, mw);
-    }
-    this.restore();
-  };
-}
-
-/* ================= desktop stock search (owner request 2026-10-11) =================
-   A member wrote in: the phone page lets them search for a stock, the computer page had no search. Now it does: a
-   field just above the terminal's top-left corner, lined up with the market picture, in a row the stage keeps clear
-   for it (computeScale holds OB_FIND_BAND above the stage), so it covers nothing on the page. Opening it lists every
-   stock strongest first, as the phone's list does; typing narrows it (ticker, then company name, then sector). The
-   arrow keys or the pointer light each stock's path through the funnel as they move, as hovering it does, and so
-   does the best match once typing pauses; Enter or a click pins the stock and opens its usual popup, as a click on
-   its tile does. The pin survives the minute update, and so does a pin made with a click on the page itself (a tile,
-   a setup card, a lane of the flow, a dot of the market picture, a sector), its popup where it stood. "/", Ctrl K
-   (⌘K) and Ctrl F open it from anywhere in the frame (the page around the frame passes them on); on the phone layout
-   they open the phone's stock list.
-   Rows use the phone page's helpers (phStatus, phNameOnly, phEsc, PH_TRI): tools/patch_terminal.py injects this
-   after the phone code. Styles: tools/terminal_find.css; light colours: tools/terminal_light.html. */
+/* ================= locked preview removed (unlocked, crystal clear) ================= */
+const OB_LOCK = false;
+function oblPerDay() { return ''; }
+function obLockNote() {}
 const OB_FIND_BAND = 38;                   // the row above the stage that holds the field (computeScale keeps it clear)
 const FIND = { root: null, inp: null, box: null, open: false, q: '', items: [], at: -1, pv: null, prev: null, wait: 0, pt: 0 };
 const OB_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || '');
