@@ -241,13 +241,13 @@ function createDashboardServer(appController) {
         return sendJson(res, 200, { ok: true, ...resJ });
       }
 
-      // Static files & clean SPA routes (/app/orderblock, /orderblock, /app/journal, /journal)
+      // Static files & clean SPA routes (/app/orderblock, /app/journal, /journal)
       if (req.method === 'GET' || req.method === 'HEAD') {
         const cleanPathname = pathname.replace(/\/+$/, '') || '/';
         const relPath =
           cleanPathname === '/' || cleanPathname === '/app'
             ? 'index.html'
-            : cleanPathname === '/orderblock' || cleanPathname === '/app/orderblock'
+            : cleanPathname === '/app/orderblock'
             ? 'orderblock.html'
             : cleanPathname === '/journal' || cleanPathname === '/app/journal'
             ? 'journal.html'

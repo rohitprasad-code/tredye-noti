@@ -7,13 +7,17 @@
   <meta name="color-scheme" content="light dark">
   <title>Tredye Flow Alerts — Order-Flow &amp; Order-Block Reminder Desk</title>
   <link rel="stylesheet" href="/styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/theme-ob.css">
   <script type="module">
     if (!("popover" in HTMLElement.prototype)) {
       import("https://unpkg.com/@oddbird/popover-polyfill@latest/dist/popover.min.js");
     }
   </script>
 </head>
-<body>
+<body class="has-ob-rail">
   <header class="topbar">
     <div class="brand-group">
       <div class="brand-mark" aria-hidden="true">⚡</div>
@@ -362,6 +366,7 @@
   <!-- Top-layer manual Popover Toast Container -->
   <div id="toastStack" class="toast-stack" aria-live="polite"></div>
 
+  <script src="/nav-rail.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

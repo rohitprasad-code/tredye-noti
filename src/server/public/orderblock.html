@@ -3,7 +3,7 @@
 <head><meta name="ob-build" content="ob-EGUVrGbAvoIk_NELzbmfitmkMCKAaVhfWwDNfNMzOesmgy8IKbx2BNpButY">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Order Block · OrderBlock</title>
+<title>Order Block</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter+Tight:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -1458,6 +1458,247 @@ body.stacked .ob-top-bar { display: none; }
   -moz-osx-font-smoothing: grayscale;
 }
 
+
+/* ================= LEFT VERTICAL SIDEBAR RAIL (#obSideRail) ================= */
+.ob-side-rail {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 50px;
+  background: rgba(5, 8, 13, 0.98);
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: stretch;
+  padding: 8px 7px 12px;
+  z-index: 120;
+  transition: width 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+  font-family: var(--f-ui, "Inter Tight", -apple-system, sans-serif);
+  user-select: none;
+}
+body.rail-expanded .ob-side-rail {
+  width: 190px;
+}
+body.stacked .ob-side-rail {
+  display: none;
+}
+.ob-side-rail .rail-top,
+.ob-side-rail .rail-bottom {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ob-side-rail .rail-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 30px;
+  padding: 0 7px;
+  text-decoration: none;
+  color: #EEF3FA;
+}
+.ob-side-rail .logo-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 18px;
+  flex: none;
+}
+.ob-side-rail .logo-bars i {
+  display: block;
+  height: 2.5px;
+  border-radius: 2px;
+}
+.ob-side-rail .logo-bars .b1 { width: 17px; background: #19E58C; box-shadow: 0 0 6px rgba(25, 229, 140, 0.7); }
+.ob-side-rail .logo-bars .b2 { width: 12px; background: #EEF3FA; }
+.ob-side-rail .logo-bars .b3 { width: 17px; background: #FF3B5C; box-shadow: 0 0 6px rgba(255, 59, 92, 0.7); }
+.ob-side-rail .rail-brand-lbl {
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.03em;
+  color: #EEF3FA;
+}
+.ob-side-rail .rail-collapse {
+  width: 100%;
+  height: 26px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.03);
+  color: #8C9CB2;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.16s ease;
+}
+.ob-side-rail .rail-collapse:hover {
+  color: #EEF3FA;
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.16);
+}
+.ob-side-rail .rail-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.07);
+  margin: 4px 2px;
+}
+.ob-side-rail .rail-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 34px;
+  padding: 0 9px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  color: #8C9CB2;
+  text-decoration: none;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: all 0.16s ease;
+}
+.ob-side-rail .rail-ic {
+  width: 18px;
+  text-align: center;
+  font-size: 14px;
+  flex: none;
+}
+.ob-side-rail .rail-lbl {
+  opacity: 0;
+  pointer-events: none;
+  overflow: hidden;
+  transition: opacity 0.15s ease;
+}
+body.rail-expanded .ob-side-rail .rail-lbl {
+  opacity: 1;
+  pointer-events: auto;
+}
+.ob-side-rail .rail-item:hover {
+  color: #EEF3FA;
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+.ob-side-rail .rail-item.active {
+  color: #7CFFC4;
+  background: rgba(25, 229, 140, 0.14);
+  border-color: rgba(25, 229, 140, 0.45);
+  box-shadow: 0 0 12px rgba(25, 229, 140, 0.18);
+}
+.ob-side-rail .rail-item.journey {
+  color: #FCD34D;
+  background: rgba(245, 184, 46, 0.08);
+  border-color: rgba(245, 184, 46, 0.22);
+}
+.ob-side-rail .rail-item.journey:hover {
+  color: #FEF3C7;
+  background: rgba(245, 184, 46, 0.18);
+  border-color: rgba(245, 184, 46, 0.5);
+  box-shadow: 0 0 12px rgba(245, 184, 46, 0.2);
+}
+body:not(.rail-expanded) .ob-side-rail .rail-item[data-tip]:hover::after {
+  content: attr(data-tip);
+  position: absolute;
+  left: 48px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: rgba(10, 16, 26, 0.96);
+  color: #EEF3FA;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  padding: 4px 9px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+  z-index: 200;
+}
+.ob-side-rail .rail-live {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 28px;
+  padding: 0 12px;
+  font-family: var(--f-num, "JetBrains Mono", monospace);
+  font-size: 10px;
+  font-weight: 700;
+  color: #7CFFC4;
+}
+.ob-side-rail .rail-live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #19E58C;
+  box-shadow: 0 0 8px #19E58C;
+  flex: none;
+  animation: obDotGlow 1.8s infinite ease-in-out;
+}
+.ob-side-rail .rail-theme-pill {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  align-self: center;
+}
+body.rail-expanded .ob-side-rail .rail-theme-pill {
+  flex-direction: row;
+  align-self: stretch;
+  justify-content: space-around;
+}
+.ob-side-rail .rt-btn {
+  width: 26px;
+  height: 24px;
+  border-radius: 999px;
+  border: 0;
+  background: transparent;
+  color: #7A8CA3;
+  font-size: 12px;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: all 0.15s ease;
+}
+.ob-side-rail .rt-btn:hover { color: #EEF3FA; }
+.ob-side-rail .rt-btn.on {
+  background: rgba(255, 255, 255, 0.14);
+  color: #FFFFFF;
+}
+:root[data-theme=light] .ob-side-rail {
+  background: rgba(248, 250, 252, 0.96);
+  border-right-color: #DCE2EB;
+}
+:root[data-theme=light] .ob-side-rail .rail-item { color: #475569; }
+:root[data-theme=light] .ob-side-rail .rail-item.active {
+  color: #0E9F63;
+  background: rgba(14, 159, 99, 0.1);
+  border-color: rgba(14, 159, 99, 0.35);
+}
+:root[data-theme=light] .ob-side-rail .rail-item.journey {
+  color: #B45309;
+  background: rgba(217, 138, 6, 0.1);
+  border-color: rgba(217, 138, 6, 0.3);
+}
+:root[data-theme=light] .ob-top-bar {
+  background: rgba(248, 250, 252, 0.94);
+  border-bottom-color: #DCE2EB;
+}
+/* Shift Top Bar smoothly next to Left Rail */
+.ob-top-bar {
+  left: 50px !important;
+  transition: left 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+body.rail-expanded .ob-top-bar {
+  left: 190px !important;
+}
+
 </style>
 <style id="obf-light">
 /* ================= OrderBlock · light theme for the Order Block terminal =================
@@ -1896,13 +2137,50 @@ body.stacked .ob-top-bar { display: none; }
 </head>
 <body>
 
+<aside class="ob-side-rail" id="obSideRail" aria-label="Primary Navigation">
+  <div class="rail-top">
+    <a href="/app/orderblock" class="rail-logo" title="Order Block">
+      <span class="logo-bars" aria-hidden="true">
+        <i class="b1"></i>
+        <i class="b2"></i>
+        <i class="b3"></i>
+      </span>
+      <span class="rail-lbl rail-brand-lbl">Terminal</span>
+    </a>
+    <button type="button" class="rail-collapse" id="obRailToggle" title="Expand / Collapse sidebar" aria-label="Toggle sidebar">»</button>
+    <div class="rail-divider"></div>
+    <a href="/" class="rail-item" title="Alert Desk &amp; Tracker (/)" data-tip="Alert Desk">
+      <span class="rail-ic">⌂</span>
+      <span class="rail-lbl">Alert Desk</span>
+    </a>
+    <a href="/app/orderblock" class="rail-item active" title="Order Block Terminal (/app/orderblock)" data-tip="Order Block">
+      <span class="rail-ic">⟁</span>
+      <span class="rail-lbl">Order Block</span>
+    </a>
+    <a href="/app/journal" class="rail-item journey" title="My Journey &amp; Investment Booklet (/app/journal)" data-tip="My Journey">
+      <span class="rail-ic">📖</span>
+      <span class="rail-lbl">My Journey</span>
+    </a>
+    <a href="/app/journal?action=new" class="rail-item" title="Log New Investment in My Journey" data-tip="Log Trade">
+      <span class="rail-ic">➕</span>
+      <span class="rail-lbl">Log Trade</span>
+    </a>
+  </div>
+  <div class="rail-bottom">
+    <div class="rail-live" title="Live 218 NSE F&amp;O Feed" data-tip="Live 218 F&O">
+      <span class="rail-live-dot"></span>
+      <span class="rail-lbl">218 Live</span>
+    </div>
+    <div class="rail-theme-pill" role="group" aria-label="Theme toggle">
+      <button type="button" class="rt-btn" data-theme-set="light" title="Light theme" aria-label="Light theme">☀</button>
+      <button type="button" class="rt-btn on" data-theme-set="dark" title="Dark theme" aria-label="Dark theme">☾</button>
+    </div>
+  </div>
+</aside>
+
+
 <header class="ob-top-bar" id="obTopBar">
   <div class="ob-bar-left">
-    <div class="ob-brand" title="OrderBlock 5-Stage Visual Funnel">
-      <span class="ob-logo-icon">⚡</span>
-      <span class="ob-brand-title">ORDERBLOCK</span>
-      <span class="ob-brand-badge">218 F&O</span>
-    </div>
     <div id="obFindHost"></div>
   </div>
   <div class="ob-bar-center">
@@ -7255,6 +7533,35 @@ if (!OB_PEEK) {
 
 
 function obControlsMount() {
+
+  // Bind Left Sidebar Rail expand/collapse & theme toggle
+  const rail = document.getElementById("obSideRail");
+  if (rail && !rail._mounted) {
+    rail._mounted = true;
+    const toggleBtn = document.getElementById("obRailToggle");
+    if (toggleBtn) {
+      toggleBtn.addEventListener("click", () => {
+        const exp = document.body.classList.toggle("rail-expanded");
+        toggleBtn.textContent = exp ? "«" : "»";
+        if (typeof rerender === "function") rerender(true);
+      });
+    }
+    const themeBtns = [...rail.querySelectorAll(".rt-btn")];
+    const syncThemeBtns = (theme) => {
+      themeBtns.forEach(b => b.classList.toggle("on", b.dataset.themeSet === theme));
+    };
+    const curTheme = document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
+    syncThemeBtns(curTheme);
+    themeBtns.forEach(btn => {
+      btn.addEventListener("click", () => {
+        const nextTheme = btn.dataset.themeSet === "light" ? "light" : "dark";
+        document.cookie = "ob_theme=" + nextTheme + ";path=/;max-age=31536000";
+        syncThemeBtns(nextTheme);
+        window.postMessage({ t: "ob-theme", theme: nextTheme }, location.origin);
+      });
+    });
+  }
+
   const bar = document.getElementById("obTopBar");
   if (!bar || bar._mounted || OB_PEEK) return;
   bar._mounted = true;
@@ -7353,16 +7660,18 @@ function computeScale() {
   S.dpr = Math.min(2, window.devicePixelRatio || 1);
   S.reduced = false;
   if (!S.stacked) {
+    const railEl = document.getElementById('obSideRail');
+    const LEFT_RAIL_W = railEl ? (document.body.classList.contains('rail-expanded') ? 190 : 50) : 0;
     const TOP_BAR_H = 40;
     const availH = Math.max(400, H - TOP_BAR_H);
-    const availW = Math.max(600, W);
+    const availW = Math.max(600, W - LEFT_RAIL_W);
     S.s = Math.min(availW / 1920, availH / 1080);
     S.Hd = 1080;
     S.tx = S.s >= 0.95 ? 1 : Math.min(1.18, 1 / Math.sqrt(S.s));
     S.k = S.s * S.dpr;
     S.tier3 = S.s >= 0.8;
     S.crest2 = S.tx >= 1.15;
-    S.left = Math.max(0, (availW - 1920 * S.s) / 2);
+    S.left = LEFT_RAIL_W + Math.max(0, (availW - 1920 * S.s) / 2);
     S.top = TOP_BAR_H + Math.max(0, (availH - 1080 * S.s) / 2);
   }
 }
