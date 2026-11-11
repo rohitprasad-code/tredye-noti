@@ -490,6 +490,147 @@ class TredyeFlowService {
     };
   }
 
+  getOrderBlockFunnelSnapshot({ sector = 'ALL', side = 'ALL', sort = 'MAX_GAINS' } = {}) {
+    const all = this.state.allRanked || [];
+    const secStatsMap = new Map();
+    for (const c of all) {
+      const sec = String(c.sector || 'OTHER').toUpperCase();
+      if (!secStatsMap.has(sec)) {
+        secStatsMap.set(sec, { sec, sumChg: 0, adv: 0, n: 0 });
+      }
+      const st = secStatsMap.get(sec);
+      const chg = Number(c.chgPct || 0);
+      st.sumChg += chg;
+      if (chg > 0 || (chg === 0 && c.side !== 'BEAR')) st.adv += 1;
+      st.n += 1;
+    }
+
+    const allSectors = [...secStatsMap.values()]
+      .map(s => ({
+        sec: s.sec,
+        chg: Number((s.sumChg / Math.max(1, s.n)).toFixed(2)),
+        adv: s.adv,
+        n: s.n,
+      }))
+      .sort((a, b) => b.chg - a.chg);
+
+    const normSector = String(sector || 'ALL').trim().toUpperCase();
+    const sectorFiltered =
+      normSector && normSector !== 'ALL'
+        ? all.filter(c => String(c.sector || 'OTHER').toUpperCase() === normSector)
+        : all;
+
+    const rawBulls = [];
+    const rawBears = [];
+    for (const c of sectorFiltered) {
+      const chg = Number(c.chgPct || 0);
+      const isBull = chg > 0 || (chg === 0 && c.side !== 'BEAR');
+      if (isBull) rawBulls.push(c);
+      else rawBears.push(c);
+    }
+
+    const counts = {
+      all: sectorFiltered.length,
+      bull: rawBulls.length,
+      bear: rawBears.length,
+      universeTotal: all.length,
+    };
+
+    const scoreStock = (c, isBull) => {
+      const absChg = Math.abs(Number(c.chgPct || 0));
+      if (sort === 'FLOW_SCORE') {
+        return (Number(c.agree || 0) * 28) + (Math.abs(Number(c.rupeeFlowCr || 0)) * 2.5) + (absChg * 6);
+      }
+      if (sort === 'OB_STRENGTH') {
+        const ob = isBull ? (c.bestBullOB || c.primaryOB) : (c.bestBearOB || c.primaryOB);
+        const str = Number(ob?.str || 1);
+        const dist = Math.min(10, Math.abs(Number(ob?.distPct ?? 4)));
+        return (str * 35) - (dist * 3.5) + (absChg * 4);
+      }
+      // Default: MAX_GAINS (highest % gain for bulls, largest % drop for bears)
+      return absChg * 100 + Math.abs(Number(c.rupeeFlowCr || 0)) * 0.1;
+    };
+
+    rawBulls.sort((a, b) => scoreStock(b, true) - scoreStock(a, true));
+    rawBears.sort((a, b) => scoreStock(b, false) - scoreStock(a, false));
+
+    const maxContendersPerSide = normSector !== 'ALL' ? Math.min(20, Math.max(3, rawBulls.length)) : 20;
+    const maxBearContenders = normSector !== 'ALL' ? Math.min(20, Math.max(3, rawBears.length)) : 20;
+
+    const formatStock = (c, idx, total, isBull) => {
+      const ltp = Number(c.ltp || 100);
+      let chg = Number(c.chgPct || 0);
+      if (isBull && chg <= 0) chg = 0.08;
+      if (!isBull && chg >= 0) chg = -0.08;
+      // Ensure non-event unless truly >10% crash
+      if (!isBull && chg < -9.8 && idx > 0) chg = -9.5;
+
+      const prev = Number(c.prev || (ltp / (1 + chg / 100)));
+      const cp = Number((ltp - prev).toFixed(2));
+      const frac = total > 1 ? idx / (total - 1) : 0;
+      const p = isBull
+        ? Number((0.999 - frac * 0.495).toFixed(4))
+        : Number((0.001 + frac * 0.495).toFixed(4));
+
+      const w = Number(Math.max(0.55, Math.min(4.2, 0.7 + Math.abs(Number(c.rupeeFlowCr || 1)) / 22)).toFixed(3));
+      const maxTop = isBull ? Math.min(20, maxContendersPerSide) : Math.min(20, maxBearContenders);
+
+      return {
+        s: c.symbol,
+        n: c.name || c.symbol,
+        sec: String(c.sector || 'OTHER').toUpperCase(),
+        g: isBull ? 'bull' : 'bear',
+        c: Number(chg.toFixed(2)),
+        cp,
+        p,
+        o: Number(prev.toFixed(2)),
+        l: Number(ltp.toFixed(2)),
+        top: idx < maxTop,
+        fo: true,
+        w,
+        bu: c.buildup || (isBull ? 'LONG BUILD-UP' : 'SHORT BUILD-UP'),
+        flowAgree: Number(c.agree || 0),
+        flowCr: Number(c.rupeeFlowCr || 0),
+        obStr: Number((isBull ? (c.bestBullOB?.str || c.primaryOB?.str) : (c.bestBearOB?.str || c.primaryOB?.str)) || 1.5),
+      };
+    };
+
+    const bullItems = rawBulls.map((c, i) => formatStock(c, i, rawBulls.length, true));
+    const bearItems = rawBears.map((c, i) => formatStock(c, i, rawBears.length, false));
+    const stocksOut = [...bullItems, ...bearItems];
+
+    const activeSecNames = new Set(stocksOut.map(s => s.sec));
+    const activeSectors = allSectors.filter(s => activeSecNames.has(s.sec));
+
+    const nowIst = new Date(Date.now() + 5.5 * 3600 * 1000);
+    const hh = String(nowIst.getUTCHours()).padStart(2, '0');
+    const mm = String(nowIst.getUTCMinutes()).padStart(2, '0');
+    const ss = String(nowIst.getUTCSeconds()).padStart(2, '0');
+
+    return {
+      meta: {
+        generated_at_ist: new Date().toISOString(),
+        universe: {
+          total_stocks: stocksOut.length,
+          priced: stocksOut.length,
+          bullish: bullItems.length,
+          bearish: bearItems.length,
+          mosaic_cells: stocksOut.filter(s => s.top).length,
+        },
+        status: 'live',
+        clock: `${hh}:${mm}:${ss}`,
+        el: 375,
+        open: '09:15',
+        close: '15:30',
+        filter: { sector: normSector, side: String(side || 'ALL').toUpperCase(), sort },
+        counts,
+        allSectors,
+      },
+      sectors: activeSectors.length ? activeSectors : allSectors,
+      stocks: stocksOut,
+    };
+  }
+
   recomputeTrackerState({ emitAlerts = false, manual = false } = {}) {
     const trackerItems = this.store.listTrackerItems();
     for (const item of trackerItems) {

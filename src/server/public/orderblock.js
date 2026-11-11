@@ -10,7 +10,7 @@
   let hoveredSector = null;
   let selectedSector = 'ALL';
   let filterMode = 'ALL'; // ALL | BULL | BEAR
-  let sortOrder = 'FLOW_SCORE'; // FLOW_SCORE (Strongest Flow) | OB_STRENGTH (Strongest Order Block)
+  let sortOrder = 'MAX_GAINS'; // MAX_GAINS (Max Gains / Bulls & Bears) | FLOW_SCORE (Strongest Flow) | OB_STRENGTH (Strongest Order Block)
   let searchQuery = '';
   let screenerViewMode = 'TABLE'; // TABLE | GRID
   let stageCollapsed = false;
@@ -23,8 +23,10 @@
   // Smooth animated split state for Flow Stream Canvas (0.5 = All Split, 1.0 = Bullish Full, 0.0 = Bearish Full)
   let currentSplitRatio = 0.5;
   let targetSplitRatio = 0.5;
-  let currentBullStreamStocks = [];
-  let currentBearStreamStocks = [];
+  let currentBullStreamStocks = []; // Top picked Bulls from the TOP green bracket [ ]
+  let currentBearStreamStocks = []; // Bottom picked Bears from the BOTTOM red bracket [ ]
+  let currentAllBullSpine = [];     // All Bulls sorted from Max Gain (top) down to 0% (midY)
+  let currentAllBearSpine = [];     // All Bears sorted from 0% (midY) down to Max Loss (bottom)
 
   const els = {
     searchInput: document.getElementById('hudSearchInput'),
@@ -300,7 +302,7 @@
     els.intradayWaveSvg.innerHTML = parts.join('');
   }
 
-  // Compute enriched sectors ordered by net flow
+  // Compute enriched sectors ordered from Maximum Gain (top) to Maximum Loss (bottom)
   function getOrderedSectors(sectors = [], universe = []) {
     const countsBySec = new Map();
     for (const s of universe) {
@@ -320,64 +322,75 @@
       };
     });
 
-    enriched.sort((a, b) => b.flowCr - a.flowCr);
+    enriched.sort((a, b) => {
+      if (Math.abs((b.avgChgPct || 0) - (a.avgChgPct || 0)) > 0.01) {
+        return (b.avgChgPct || 0) - (a.avgChgPct || 0);
+      }
+      return (b.flowCr || 0) - (a.flowCr || 0);
+    });
     return enriched;
   }
 
-  // Render Left Sector Stack Nodes (Both stacks stay populated so Bearish smoothly slides down on Bullish click)
+  // Render Left Sector Stack Nodes (Sorted Top-to-Bottom by Gain %, with 10 Bull/Bear split segments per card)
   function renderSectorStacks(sectors = [], universe = []) {
     const ordered = getOrderedSectors(sectors, universe);
 
-    let bullSectors = ordered.filter(s => s.flowCr >= 0);
-    let bearSectors = [...ordered].filter(s => s.flowCr < 0).reverse();
+    let bullSectors = ordered.filter(s => s.avgChgPct >= 0 || s.flowCr >= 0);
+    let bearSectors = ordered.filter(s => s.avgChgPct < 0 && s.flowCr < 0);
 
     if (bullSectors.length < 4 && ordered.length >= 6) {
       const half = Math.ceil(ordered.length / 2);
       bullSectors = ordered.slice(0, half);
-      bearSectors = ordered.slice(half).reverse();
+      bearSectors = ordered.slice(half);
     } else if (bearSectors.length < 4 && ordered.length >= 6) {
       const half = Math.ceil(ordered.length / 2);
       bullSectors = ordered.slice(0, half);
-      bearSectors = ordered.slice(half).reverse();
+      bearSectors = ordered.slice(half);
     }
 
-    const bullLimit = filterMode === 'BULL' ? 12 : 8;
+    const bullLimit = filterMode === 'BULL' ? 12 : 9;
     const bearLimit = filterMode === 'BEAR' ? 12 : 8;
+    // Top stack: highest gain at very top, tapering down toward 0%
     const displayBullSectors = (filterMode === 'BULL' && bullSectors.length < 10 ? ordered : bullSectors).slice(0, bullLimit);
-    const displayBearSectors = (filterMode === 'BEAR' && bearSectors.length < 10 ? [...ordered].reverse() : bearSectors).slice(0, bearLimit);
+    // Bottom stack: mildest bear near 0% at top of bottom stack, most negative bear at very bottom
+    const bearSource = filterMode === 'BEAR' && bearSectors.length < 10 ? ordered.slice(-bearLimit) : bearSectors.slice(-bearLimit);
+    const displayBearSectors = bearSource;
 
     const totalBullCr = displayBullSectors.reduce((a, s) => a + Math.abs(s.flowCr), 0);
     const totalBearCr = displayBearSectors.reduce((a, s) => a + Math.abs(s.flowCr), 0);
-    els.spineBullVal.textContent = `+${totalBullCr.toFixed(0)} Cr`;
-    els.spineBearVal.textContent = `-${totalBearCr.toFixed(0)} Cr`;
+    if (els.spineBullVal) els.spineBullVal.textContent = `+${totalBullCr.toFixed(0)} Cr`;
+    if (els.spineBearVal) els.spineBearVal.textContent = `-${totalBearCr.toFixed(0)} Cr`;
 
     const activeSec = selectedSector !== 'ALL' ? selectedSector : hoveredSector;
 
-    const buildSectorNodeHtml = (sec, isBull, pool) => {
-      const maxCr = Math.max(1, ...pool.map(x => Math.abs(x.flowCr)));
-      const ratio = Math.max(0.2, Math.min(1, Math.abs(sec.flowCr) / maxCr));
-      const litCount = Math.max(2, Math.round(ratio * 7));
+    const buildSectorNodeHtml = (sec, isBull) => {
+      const totalStocks = Math.max(1, (sec.bullCount || 0) + (sec.bearCount || 0));
+      const rawBullRatio = (sec.bullCount || 0) / totalStocks;
+      const greenSegs = isBull
+        ? Math.max(4, Math.min(9, Math.round(rawBullRatio * 10)))
+        : Math.max(1, Math.min(6, Math.round(rawBullRatio * 10)));
       let segs = '';
-      for (let i = 0; i < 7; i++) {
-        const cls = i < litCount ? (isBull ? 'on-up' : 'on-dn') : '';
+      for (let i = 0; i < 10; i++) {
+        const cls = i < greenSegs ? 'on-up' : 'on-dn';
         segs += `<span class="shn-seg ${cls}"></span>`;
       }
       const isAct = activeSec === sec.sector;
+      const pctVal = Number(sec.avgChgPct || 0);
       return `
         <div class="sector-hud-node ${isBull ? 'bull' : 'bear'} ${isAct ? 'active' : ''}"
              data-sector="${escapeHtml(sec.sector)}"
              data-side="${isBull ? 'BULL' : 'BEAR'}">
           <div class="shn-top">
             <span class="shn-name">${escapeHtml(sec.sector.toUpperCase())}</span>
-            <span class="shn-pct ${isBull ? 'up' : 'dn'}">${sec.avgChgPct >= 0 ? '+' : ''}${sec.avgChgPct.toFixed(1)}%</span>
+            <span class="shn-pct ${isBull ? 'up' : 'dn'}">${pctVal >= 0 ? '+' : ''}${pctVal.toFixed(1)}%</span>
           </div>
           <div class="shn-bars">${segs}</div>
         </div>
       `;
     };
 
-    els.sectorNodesTop.innerHTML = displayBullSectors.map(s => buildSectorNodeHtml(s, true, displayBullSectors)).join('');
-    els.sectorNodesBottom.innerHTML = displayBearSectors.map(s => buildSectorNodeHtml(s, false, displayBearSectors)).join('');
+    els.sectorNodesTop.innerHTML = displayBullSectors.map(s => buildSectorNodeHtml(s, true)).join('');
+    els.sectorNodesBottom.innerHTML = displayBearSectors.map(s => buildSectorNodeHtml(s, false)).join('');
   }
 
   // Helper: get best Order Block object + impulse strength + distance % for a stock card
@@ -396,24 +409,44 @@
     return { ob, str, distPct, status };
   }
 
-  // Filter and sort the 218-stock universe according to Sector, Side (All/Bullish/Bearish), Search, and Sort (Strongest Flow / Strongest Order Block)
-  function getFilteredAndSortedStocks(universe = [], { ignoreSidePill = false } = {}) {
+  // Compute signed spine rank score so stocks sort cleanly from Maximum Gains & Strongest Bulls (TOP)
+  // down through 0 (MIDDLE) to Maximum Losses & Strongest Bears (BOTTOM)
+  function getSignedSpineMetric(stock) {
+    const isBull = stock.side !== 'BEAR';
+    const chg = Number(stock.chgPct || 0);
+    const score = Number(stock.strengthScore || 50);
+    const flow = Math.abs(Number(stock.rupeeFlowCr || 0));
+    const obStr = Number(getCardOrderBlockMeta(stock).str || 1.0);
+
+    if (sortOrder === 'OB_STRENGTH') {
+      const mag = obStr * 100 + score * 0.6 + Math.abs(chg) * 8;
+      return isBull ? mag : -mag;
+    }
+    if (sortOrder === 'FLOW_SCORE') {
+      const mag = score * 2.5 + Math.abs(chg) * 14 + Math.min(80, flow * 0.15);
+      return isBull ? mag : -mag;
+    }
+    // Default 'MAX_GAINS': sorted by Maximum Gains (Bulls at top) down to Maximum Losses (Bears at bottom)
+    const gainMag = Math.max(0.02, isBull ? Math.max(0.05, chg) : Math.max(0.05, -chg));
+    const composite = gainMag * 100 + score * 0.35 + obStr * 6;
+    return isBull ? composite : -composite;
+  }
+
+  // Build the Top-to-Bottom Spine-Sorted pools and pick the top few Bulls from the TOP and bottom few Bears from the BOTTOM
+  function getSpineSortedPools(universe = []) {
     const trackerSet = new Set((appState?.tracker || []).map(t => t.symbol));
     const activeSec = selectedSector !== 'ALL' ? selectedSector : hoveredSector;
 
-    let list = [...universe];
-
+    let base = [...universe];
     if (trackerOnlyFilter) {
-      list = list.filter(s => trackerSet.has(s.symbol));
+      base = base.filter(s => trackerSet.has(s.symbol));
     }
-
     if (activeSec) {
-      list = list.filter(s => s.sector === activeSec);
+      base = base.filter(s => s.sector === activeSec);
     }
-
     if (searchQuery) {
       const q = searchQuery.toUpperCase();
-      list = list.filter(
+      base = base.filter(
         s =>
           s.symbol.includes(q) ||
           (s.name || '').toUpperCase().includes(q) ||
@@ -422,28 +455,36 @@
       );
     }
 
-    if (!ignoreSidePill && filterMode === 'BULL') {
-      list = list.filter(s => s.side === 'BULL');
-    } else if (!ignoreSidePill && filterMode === 'BEAR') {
-      list = list.filter(s => s.side === 'BEAR');
-    }
+    // All Bulls sorted from TOP (Maximum Gain / Strongest Bull) down to MID (Mildest Bull near 0%)
+    const allBulls = base
+      .filter(s => s.side === 'BULL')
+      .sort((a, b) => getSignedSpineMetric(b) - getSignedSpineMetric(a));
 
-    list.sort((a, b) => {
-      if (sortOrder === 'OB_STRENGTH') {
-        const sa = getCardOrderBlockMeta(a).str;
-        const sb = getCardOrderBlockMeta(b).str;
-        if (sb !== sa) return sb - sa;
-      }
-      if ((b.strengthScore || 0) !== (a.strengthScore || 0)) {
-        return (b.strengthScore || 0) - (a.strengthScore || 0);
-      }
-      return Math.abs(b.rupeeFlowCr || 0) - Math.abs(a.rupeeFlowCr || 0);
-    });
+    // All Bears sorted from MID (Mildest Bear near 0%) down to BOTTOM (Maximum Loss / Strongest Bear at the very end)
+    const allBears = base
+      .filter(s => s.side === 'BEAR')
+      .sort((a, b) => getSignedSpineMetric(b) - getSignedSpineMetric(a));
 
-    return list;
+    return { allBulls, allBears };
   }
 
-  // Render Middle Stock Matrix (Smoothly shifts Bearish down off screen on Bullish click, or shifts Bullish up on Bearish click)
+  // Filter and sort the 218-stock universe according to Sector, Side (All/Bullish/Bearish), Search, and Sort
+  function getFilteredAndSortedStocks(universe = [], { ignoreSidePill = false } = {}) {
+    const { allBulls, allBears } = getSpineSortedPools(universe);
+
+    if (!ignoreSidePill && filterMode === 'BULL') {
+      return allBulls;
+    }
+    if (!ignoreSidePill && filterMode === 'BEAR') {
+      // Return strongest / maximum-loss bears first when viewing Bearish list
+      return [...allBears].reverse();
+    }
+
+    // Full top-to-bottom spine order: Maximum Gain Bulls at top -> Mild Bulls -> Mild Bears -> Maximum Loss Bears at bottom
+    return [...allBulls, ...allBears];
+  }
+
+  // Render Middle Stock Matrix by picking the top few from the TOP of the spine and bottom few from the BOTTOM of the spine
   function renderStockMatrices(universe = []) {
     const isBullOnly = filterMode === 'BULL';
     const isBearOnly = filterMode === 'BEAR';
@@ -456,13 +497,14 @@
       els.obStage.classList.toggle('side-only-bear', isBearOnly);
     }
 
-    // Keep both sides populated from the sorted pool so the sliding half animates smoothly
-    const sortedBothSides = getFilteredAndSortedStocks(universe, { ignoreSidePill: true });
+    const { allBulls, allBears } = getSpineSortedPools(universe);
     const maxBullTiles = isBullOnly ? 32 : 16;
     const maxBearTiles = isBearOnly ? 32 : 16;
 
-    let bulls = sortedBothSides.filter(s => s.side === 'BULL').slice(0, maxBullTiles);
-    let bears = sortedBothSides.filter(s => s.side === 'BEAR').slice(0, maxBearTiles);
+    // Pick the few ones from the very TOP of the sorted spine (Maximum Gains / Strongest Bulls)
+    let bulls = allBulls.slice(0, maxBullTiles);
+    // Pick the few ones from the very BOTTOM of the sorted spine (Maximum Losses / Strongest Bears)
+    let bears = [...allBears].reverse().slice(0, maxBearTiles);
 
     if (bulls.length < 4 && selectedSector === 'ALL' && !searchQuery && !trackerOnlyFilter) {
       const seen = new Set(bulls.map(x => x.symbol));
@@ -479,7 +521,9 @@
       }
     }
 
-    // Store active stream stocks so #flowStreamCanvas strands are directly driven by the chart & stock flow
+    // Store both the full top-to-bottom spine arrays AND the top/bottom picked bracket subsets
+    currentAllBullSpine = allBulls.length ? allBulls : bulls;
+    currentAllBearSpine = allBears.length ? allBears : [...bears].reverse();
     currentBullStreamStocks = bulls;
     currentBearStreamStocks = bears;
 
@@ -818,14 +862,15 @@
       activeCard = currentBearStreamStocks[0] || universe.find(s => s.side === 'BEAR') || activeCard;
     }
 
-    // Keep both bullCards and bearCards populated so the off-side stack smoothly slides down/up
-    const sortedBothSides = getFilteredAndSortedStocks(universe, { ignoreSidePill: true });
-    let bullCards = (sortedBothSides.filter(s => s.side === 'BULL').length >= bullSlotCount
-      ? sortedBothSides.filter(s => s.side === 'BULL')
+    // Pick the top few Bulls from the TOP of the spine and the bottom few Bears from the BOTTOM of the spine
+    const { allBulls, allBears } = getSpineSortedPools(universe);
+    const extremeBearsFromBottom = [...allBears].reverse();
+    let bullCards = (allBulls.length >= bullSlotCount
+      ? allBulls
       : universe.filter(s => s.side === 'BULL')
     ).slice(0, bullSlotCount);
-    let bearCards = (sortedBothSides.filter(s => s.side === 'BEAR').length >= bearSlotCount
-      ? sortedBothSides.filter(s => s.side === 'BEAR')
+    let bearCards = (extremeBearsFromBottom.length >= bearSlotCount
+      ? extremeBearsFromBottom
       : universe.filter(s => s.side === 'BEAR')
     ).slice(0, bearSlotCount);
 
@@ -1233,6 +1278,38 @@
     return { scoreNorm, pressureNorm, obNorm, midInfl, endSlope, flowWeight };
   }
 
+  // Deterministic hash helper so each stock has a stable intraday wave signature & OB trigger marker
+  function symHash(sym = '') {
+    let h = 2166136261;
+    for (let i = 0; i < sym.length; i++) {
+      h ^= sym.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return Math.abs(h);
+  }
+
+  // Evaluate a wavy intraday stock trajectory at normalized horizontal progress t in [0..1]
+  function evalWavyTrajectoryY(t, midY, targetY, stock, isBull, nowMs, laneIdx = 0) {
+    const h = symHash(stock?.symbol || `S${laneIdx}`);
+    const p1 = (h % 100) * 0.0628;
+    const p2 = ((h >> 7) % 100) * 0.0628;
+    const gainPower = 0.62 + ((h % 19) / 19) * 0.26;
+    const baseProgress = Math.pow(t, gainPower);
+    const baseY = midY + (targetY - midY) * baseProgress;
+
+    const env = Math.sin(t * Math.PI);
+    const dist = Math.abs(targetY - midY);
+    const amp = Math.min(22, Math.max(3.5, dist * 0.095));
+    const drift = animPaused ? 0 : nowMs * 0.00055;
+    const wave =
+      (Math.sin(t * Math.PI * 3.2 + p1 + drift) * 0.62 +
+        Math.cos(t * Math.PI * 6.4 + p2 - drift * 0.7) * 0.38) *
+      amp *
+      env;
+
+    return baseY + wave;
+  }
+
   function renderStreamFrame(nowMs) {
     const ctx = els.flowCanvas?.getContext('2d');
     if (ctx && canvasW > 0 && canvasH > 0) {
@@ -1250,196 +1327,537 @@
         currentSplitRatio = targetSplitRatio;
       }
 
-      const topBound = 14;
-      const botBound = canvasH - 14;
+      const topBound = 12;
+      const botBound = canvasH - 18;
       const totalSpan = Math.max(100, botBound - topBound);
       const midY = topBound + totalSpan * currentSplitRatio;
       const bullRegionH = Math.max(0, midY - topBound);
       const bearRegionH = Math.max(0, botBound - midY);
 
-      const originX = 7;
-      const spineX = canvasW * 0.69;
+      const originX = 28;
+      const spineX = Math.round(canvasW * 0.715);
+      const bracketW = Math.max(38, Math.round(canvasW * 0.115));
+      const bracketRightX = spineX + bracketW;
       const rightEdgeX = canvasW;
+      const streamSpanX = Math.max(80, spineX - originX);
+
+      // Top Green Bracket [ ] & Bottom Red Bracket [ ] vertical bounds on the sorted spine
+      const topBracketTop = topBound + 2;
+      const topBracketH = bullRegionH > 20 ? Math.max(36, Math.min(bullRegionH * 0.32, 92)) : 0;
+      const topBracketBot = topBracketTop + topBracketH;
+
+      const botBracketBot = botBound - 2;
+      const botBracketH = bearRegionH > 20 ? Math.max(36, Math.min(bearRegionH * 0.32, 92)) : 0;
+      const botBracketTop = botBracketBot - botBracketH;
 
       const activeSym = lockedSymbol || hoveredSymbol;
-      const activeDetail = activeSym ? detailCache.get(activeSym) : null;
-      const activeProfile = activeDetail?.profile;
 
       const bullPool = currentBullStreamStocks.length
         ? currentBullStreamStocks
-        : (appState?.universe || []).filter(s => s.side === 'BULL').slice(0, 24);
+        : (appState?.universe || []).filter(s => s.side === 'BULL').slice(0, 16);
       const bearPool = currentBearStreamStocks.length
         ? currentBearStreamStocks
-        : (appState?.universe || []).filter(s => s.side === 'BEAR').slice(0, 24);
+        : (appState?.universe || []).filter(s => s.side === 'BEAR').slice(0, 16);
 
-      // 1. Central Vertical Volume Profile Spine driven by real Chart Volume Profile + Stock Order Flow
-      const barsN = 86;
-      const barStepY = totalSpan / barsN;
-      let maxBuyProf = 1;
-      let maxSellProf = 1;
-      if (activeProfile && Array.isArray(activeProfile.buy) && activeProfile.buy.length) {
-        maxBuyProf = Math.max(1, ...activeProfile.buy);
-        maxSellProf = Math.max(1, ...(activeProfile.sell || activeProfile.buy));
+      const allBullSpine = currentAllBullSpine.length ? currentAllBullSpine : bullPool;
+      const allBearSpine = currentAllBearSpine.length ? currentAllBearSpine : [...bearPool].reverse();
+
+      // =========================================================================
+      // 1. Left Y-Axis Gain/Loss Scale (+3 .. 0 .. -4) & Bottom X-Axis Time Ticks
+      // =========================================================================
+      ctx.save();
+      ctx.font = '600 7.5px ui-monospace, SFMono-Regular, Menlo, monospace';
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'middle';
+
+      if (bullRegionH > 48) {
+        const bullTicks = [
+          { lbl: '+3', f: 0.04 },
+          { lbl: '+2', f: 0.19 },
+          { lbl: '+1', f: 0.44 },
+          { lbl: '+0.5', f: 0.71 },
+          { lbl: '+0.2', f: 0.86 },
+        ];
+        for (const tk of bullTicks) {
+          const ty = topBound + bullRegionH * tk.f;
+          ctx.fillStyle = 'rgba(148, 184, 168, 0.52)';
+          ctx.fillText(tk.lbl, originX - 5, ty);
+          ctx.strokeStyle = 'rgba(148, 184, 168, 0.28)';
+          ctx.lineWidth = 0.7;
+          ctx.beginPath();
+          ctx.moveTo(originX - 3, ty);
+          ctx.lineTo(originX, ty);
+          ctx.stroke();
+        }
       }
 
-      for (let i = 0; i < barsN; i++) {
-        const y = topBound + i * barStepY;
-        const isTop = y <= midY;
-        if (isTop && bullRegionH < 4) continue;
-        if (!isTop && bearRegionH < 4) continue;
+      if (currentSplitRatio > 0.03 && currentSplitRatio < 0.97) {
+        ctx.fillStyle = 'rgba(226, 241, 255, 0.78)';
+        ctx.fillText('0', originX - 5, midY);
+      }
 
-        const localFrac = isTop
-          ? (y - topBound) / Math.max(1, bullRegionH)
-          : (y - midY) / Math.max(1, bearRegionH);
+      if (bearRegionH > 48) {
+        const bearTicks = [
+          { lbl: '-0.2', f: 0.09 },
+          { lbl: '-0.5', f: 0.24 },
+          { lbl: '-0.75', f: 0.36 },
+          { lbl: '-1', f: 0.45 },
+          { lbl: '-1.25', f: 0.56 },
+          { lbl: '-1.5', f: 0.66 },
+          { lbl: '-2', f: 0.78 },
+          { lbl: '-3', f: 0.90 },
+          { lbl: '-4', f: 0.98 },
+        ];
+        for (const tk of bearTicks) {
+          const ty = midY + bearRegionH * tk.f;
+          ctx.fillStyle = 'rgba(148, 184, 168, 0.52)';
+          ctx.fillText(tk.lbl, originX - 5, ty);
+          ctx.strokeStyle = 'rgba(148, 184, 168, 0.28)';
+          ctx.lineWidth = 0.7;
+          ctx.beginPath();
+          ctx.moveTo(originX - 3, ty);
+          ctx.lineTo(originX, ty);
+          ctx.stroke();
+        }
+      }
 
-        const pool = isTop ? bullPool : bearPool;
-        const st = pool[Math.min(pool.length - 1, Math.floor(localFrac * Math.max(1, pool.length)))];
-        const m = getStockChartFlowMetrics(st, isTop);
+      // Bottom X-axis time scale (09:30 .. 12:30)
+      const timeTicks = ['09:30', '10:00', '10:30', '11:00', '11:30', '12:00', '12:30'];
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+      ctx.fillStyle = 'rgba(148, 184, 168, 0.52)';
+      for (let i = 0; i < timeTicks.length; i++) {
+        const tx = originX + 18 + ((i + 0.2) / timeTicks.length) * (streamSpanX - 24);
+        ctx.fillText(timeTicks[i], tx, canvasH - 2);
+      }
+      ctx.restore();
 
-        let profRatio = m.flowWeight;
-        if (activeProfile && Array.isArray(activeProfile.buy) && activeProfile.buy.length) {
-          const pIdx = Math.min(
-            activeProfile.buy.length - 1,
-            Math.floor((1 - localFrac) * activeProfile.buy.length)
-          );
-          const rawP = isTop
-            ? (activeProfile.buy[pIdx] || 0) / maxBuyProf
-            : ((activeProfile.sell || activeProfile.buy)[pIdx] || 0) / maxSellProf;
-          profRatio = rawP * 0.62 + m.flowWeight * 0.38;
+      // =========================================================================
+      // 2. Dotted Cyber-Matrix Heatmap Field + Electric-Blue Reference Glow Lines
+      // =========================================================================
+      const cellStepX = 4.2;
+      const cellStepY = 3.8;
+      for (let cx = originX + 10; cx < spineX - 2; cx += cellStepX) {
+        const xFrac = (cx - originX) / streamSpanX;
+        const envFrac = Math.pow(xFrac, 0.56);
+
+        // Bullish matrix cells
+        if (bullRegionH > 12) {
+          const bullTopEnv = midY - bullRegionH * envFrac;
+          for (let cy = midY - 3; cy >= bullTopEnv; cy -= cellStepY) {
+            const yFrac = (midY - cy) / Math.max(1, bullRegionH);
+            const bandPulse =
+              0.5 +
+              0.5 * Math.sin(yFrac * 26 + cx * 0.04) * Math.cos(yFrac * 11 - xFrac * 2.2);
+            const rightDense = 0.25 + 0.75 * Math.pow(xFrac, 0.85);
+            const alpha = (0.06 + bandPulse * 0.26) * rightDense;
+            if (alpha > 0.05) {
+              ctx.fillStyle = `rgba(25, 245, 158, ${Math.min(0.52, alpha).toFixed(2)})`;
+              ctx.fillRect(cx, cy, 2.3, 1.6);
+            }
+          }
         }
 
-        const edgeBell = isTop
-          ? localFrac < 0.35
-            ? 1.25
-            : 0.72 + (1 - localFrac) * 0.35
-          : localFrac > 0.65
-          ? 1.25
-          : 0.72 + localFrac * 0.35;
-
-        const len = Math.max(6, (10 + profRatio * 34) * edgeBell);
-        const alpha = Math.min(0.68, 0.22 + profRatio * 0.42);
-        ctx.fillStyle = isTop
-          ? `rgba(25, 245, 158, ${alpha.toFixed(2)})`
-          : `rgba(255, 71, 105, ${alpha.toFixed(2)})`;
-        ctx.fillRect(spineX - len * 0.65, y, len, 2.2);
+        // Bearish matrix cells
+        if (bearRegionH > 12) {
+          const bearBotEnv = midY + bearRegionH * envFrac;
+          for (let cy = midY + 3; cy <= bearBotEnv; cy += cellStepY) {
+            const yFrac = (cy - midY) / Math.max(1, bearRegionH);
+            const bandPulse =
+              0.5 +
+              0.5 * Math.sin(yFrac * 24 + cx * 0.038) * Math.cos(yFrac * 12 + xFrac * 2.0);
+            const rightDense = 0.25 + 0.75 * Math.pow(xFrac, 0.85);
+            const alpha = (0.06 + bandPulse * 0.26) * rightDense;
+            if (alpha > 0.05) {
+              ctx.fillStyle = `rgba(255, 71, 105, ${Math.min(0.52, alpha).toFixed(2)})`;
+              ctx.fillRect(cx, cy, 2.3, 1.6);
+            }
+          }
+        }
       }
 
-      // Vertical spine core line
-      ctx.strokeStyle = 'rgba(226, 241, 255, 0.28)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(spineX, topBound);
-      ctx.lineTo(spineX, botBound);
-      ctx.stroke();
+      // Electric-Blue / Cyan Horizontal Reference Glow Lines across the stream field
+      const drawCyanGlowLine = (y, startXFrac, intensity = 0.65) => {
+        const sx = originX + streamSpanX * startXFrac;
+        ctx.save();
+        ctx.strokeStyle = `rgba(32, 156, 255, ${(intensity * 0.38).toFixed(2)})`;
+        ctx.lineWidth = 4.5;
+        ctx.beginPath();
+        ctx.moveTo(sx, y);
+        ctx.lineTo(spineX, y);
+        ctx.stroke();
 
-      // 2. Helper to draw Chart-Flow Strands for Bullish (topBound..midY) and Bearish (midY..botBound)
+        ctx.strokeStyle = `rgba(96, 205, 255, ${intensity.toFixed(2)})`;
+        ctx.lineWidth = 1.15;
+        ctx.beginPath();
+        ctx.moveTo(sx, y);
+        ctx.lineTo(spineX, y);
+        ctx.stroke();
+        ctx.restore();
+      };
+
+      if (bullRegionH > 60) {
+        drawCyanGlowLine(topBound + bullRegionH * 0.19, 0.22, 0.35);
+        drawCyanGlowLine(topBound + bullRegionH * 0.44, 0.16, 0.72);
+        drawCyanGlowLine(topBound + bullRegionH * 0.71, 0.10, 0.78);
+      }
+      if (bearRegionH > 60) {
+        drawCyanGlowLine(midY + bearRegionH * 0.24, 0.14, 0.42);
+        drawCyanGlowLine(midY + bearRegionH * 0.36, 0.18, 0.48);
+        drawCyanGlowLine(midY + bearRegionH * 0.56, 0.22, 0.38);
+        drawCyanGlowLine(midY + bearRegionH * 0.90, 0.28, 0.44);
+      }
+
+      // =========================================================================
+      // 3. Wavy Intraday Stock Trajectories (originX -> spineX) + [ ] OB Trigger Boxes
+      //    & Fan-Out Connectors from Top/Bottom Selection Brackets (bracketRightX -> rightEdgeX)
+      // =========================================================================
+      const drawWavyCurve = (targetY, stock, isBull, laneIdx, alpha, lineW, drawObMarker) => {
+        const steps = 18;
+        ctx.strokeStyle = isBull
+          ? `rgba(25, 245, 158, ${alpha.toFixed(2)})`
+          : `rgba(255, 71, 105, ${alpha.toFixed(2)})`;
+        ctx.lineWidth = lineW;
+        ctx.beginPath();
+        ctx.moveTo(originX, midY);
+
+        let obMarkerPt = null;
+        const h = symHash(stock?.symbol || `L${laneIdx}`);
+        const obStep = 4 + (h % 6); // Between 22% and 50% along the intraday timeline
+
+        for (let s = 1; s <= steps; s++) {
+          const t = s / steps;
+          const x = originX + t * streamSpanX;
+          const y = evalWavyTrajectoryY(t, midY, targetY, stock, isBull, nowMs, laneIdx);
+          ctx.lineTo(x, y);
+          if (drawObMarker && s === obStep) {
+            obMarkerPt = { x, y };
+          }
+        }
+        ctx.stroke();
+
+        // Draw small hollow neon [ ] Order-Block trigger box + trailing dotted level ray
+        if (obMarkerPt) {
+          const bx = obMarkerPt.x;
+          const by = obMarkerPt.y;
+          ctx.save();
+          ctx.strokeStyle = isBull
+            ? `rgba(25, 245, 158, ${Math.min(0.92, alpha + 0.35).toFixed(2)})`
+            : `rgba(255, 71, 105, ${Math.min(0.92, alpha + 0.35).toFixed(2)})`;
+          ctx.lineWidth = 0.95;
+          ctx.strokeRect(bx - 2.5, by - 3.5, 5, 7);
+
+          // Dotted horizontal ray from the OB trigger box toward the spine
+          ctx.setLineDash([1.5, 2.5]);
+          ctx.strokeStyle = isBull
+            ? `rgba(25, 245, 158, ${(alpha * 0.55).toFixed(2)})`
+            : `rgba(255, 71, 105, ${(alpha * 0.55).toFixed(2)})`;
+          ctx.lineWidth = 0.65;
+          ctx.beginPath();
+          ctx.moveTo(bx + 3, by);
+          ctx.lineTo(spineX, by);
+          ctx.stroke();
+          ctx.restore();
+        }
+      };
+
+      // 3A. Draw unpicked middle-spine trajectories (between topBracketBot and botBracketTop)
+      if (bullRegionH > 30 && allBullSpine.length > bullPool.length) {
+        const midBulls = allBullSpine.slice(bullPool.length, bullPool.length + 22);
+        const spanH = Math.max(8, midY - topBracketBot - 4);
+        for (let i = 0; i < midBulls.length; i++) {
+          const st = midBulls[i];
+          const frac = (i + 0.5) / midBulls.length;
+          const targetY = topBracketBot + 2 + frac * spanH;
+          drawWavyCurve(targetY, st, true, i + 30, 0.24, 0.65, i % 2 === 0);
+        }
+      }
+      if (bearRegionH > 30 && allBearSpine.length > bearPool.length) {
+        const midBears = allBearSpine.slice(0, Math.min(22, Math.max(0, allBearSpine.length - bearPool.length)));
+        const spanH = Math.max(8, botBracketTop - midY - 4);
+        for (let i = 0; i < midBears.length; i++) {
+          const st = midBears[i];
+          const frac = (i + 0.5) / midBears.length;
+          const targetY = midY + 2 + frac * spanH;
+          drawWavyCurve(targetY, st, false, i + 60, 0.24, 0.65, i % 2 === 0);
+        }
+      }
+
+      // 3B. Draw PICKED TOP BULLS (entering Top Green Bracket [ ]) & PICKED BOTTOM BEARS (entering Bottom Red Bracket [ ])
+      //     and fan their connectors out from the right edge of the [ ] brackets to the Matrix!
       let highlightedStrandMeta = null;
 
-      const drawRegionStrands = (isBull, regionStartY, regionH, pool) => {
-        if (regionH < 6 || !pool.length) return;
-        const regionRatio = regionH / totalSpan;
-        const maxLanes = Math.min(32, Math.max(8, Math.round(32 * regionRatio)));
-        const lanesCount = Math.min(maxLanes, Math.max(pool.length, 12));
-        const matrixRows = regionRatio > 0.72 ? 8 : 4;
+      const drawPickedBracketGroup = (isBull, pool, bracketTop, bracketBot, regionStartY, regionH) => {
+        if (regionH < 10 || !pool.length) return;
+        const count = pool.length;
+        const bSpan = Math.max(8, bracketBot - bracketTop - 4);
 
-        for (let l = 0; l < lanesCount; l++) {
-          const stock = pool[l % pool.length];
+        for (let i = 0; i < count; i++) {
+          const stock = pool[i];
           const m = getStockChartFlowMetrics(stock, isBull);
-          const frac = (l + 0.5) / lanesCount;
-          const pad = Math.min(10, regionH * 0.06);
-          const targetSpineY = regionStartY + pad + frac * Math.max(2, regionH - pad * 2);
+          // For Bulls: #1 Max Gain is at very top (bracketTop).
+          // For Bears: #1 Max Loss is at very bottom (bracketBot), so reverse index inside bottom bracket!
+          const spineSlotFrac = isBull ? (i + 0.5) / count : 1 - (i + 0.5) / count;
+          const spineY = bracketTop + 2 + spineSlotFrac * bSpan;
 
-          // Control points shaped by the stock's actual intraday chart trajectory (midInfl & endSlope)
-          const cp1x = originX + (spineX - originX) * 0.34;
-          const baseCp1y = isBull
-            ? midY - (midY - targetSpineY) * (0.78 + m.pressureNorm * 0.16)
-            : midY + (targetSpineY - midY) * (0.78 + m.pressureNorm * 0.16);
-          const cp1y = baseCp1y - m.midInfl * 14 * regionRatio;
+          const alpha = Math.min(0.76, 0.32 + m.flowWeight * 0.36);
+          const lineW = 0.85 + m.flowWeight * 0.65;
+          drawWavyCurve(spineY, stock, isBull, i, alpha, lineW, i % 3 === 0);
 
-          const cp2x = originX + (spineX - originX) * 0.68;
-          const waveOffset = Math.sin(l * 0.85 + nowMs * (0.0009 + m.flowWeight * 0.0008)) * (4 + m.obNorm * 5);
-          const cp2y = targetSpineY - m.endSlope * 10 * regionRatio + waveOffset;
-
-          const isActiveStock = Boolean(activeSym && stock && stock.symbol === activeSym && l < pool.length);
-          const alpha = Math.min(0.55, (0.12 + m.flowWeight * 0.28) * Math.min(1, regionRatio * 1.8));
-          ctx.strokeStyle = isBull
-            ? `rgba(25, 245, 158, ${alpha.toFixed(2)})`
-            : `rgba(255, 71, 105, ${alpha.toFixed(2)})`;
-          ctx.lineWidth = 0.65 + m.flowWeight * 1.15;
-
-          ctx.beginPath();
-          ctx.moveTo(originX, midY);
-          ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, spineX, targetSpineY);
-          ctx.stroke();
-
-          // Spine to Right Matrix rows fan-out curve
-          const rowIdx = Math.floor(l / 4) % matrixRows;
-          const rowTargetY = regionStartY + ((rowIdx + 0.5) / matrixRows) * regionH;
-          const rcp1x = spineX + (rightEdgeX - spineX) * 0.42;
-          const rcp2x = spineX + (rightEdgeX - spineX) * 0.68;
+          // Fan-out curve leaving the RIGHT edge of the [ ] selection bracket (bracketRightX -> rightEdgeX)
+          const matrixTargetFrac = (i + 0.5) / count;
+          const matrixTargetY = regionStartY + 4 + matrixTargetFrac * Math.max(8, regionH - 8);
+          const rcp1x = bracketRightX + (rightEdgeX - bracketRightX) * 0.38;
+          const rcp2x = bracketRightX + (rightEdgeX - bracketRightX) * 0.66;
 
           ctx.strokeStyle = isBull
-            ? `rgba(25, 245, 158, ${(alpha * 0.88).toFixed(2)})`
-            : `rgba(255, 71, 105, ${(alpha * 0.88).toFixed(2)})`;
-          ctx.lineWidth = 0.6 + m.flowWeight * 0.75;
+            ? `rgba(25, 245, 158, ${(alpha * 0.82).toFixed(2)})`
+            : `rgba(255, 71, 105, ${(alpha * 0.82).toFixed(2)})`;
+          ctx.lineWidth = 0.65 + m.flowWeight * 0.45;
           ctx.beginPath();
-          ctx.moveTo(spineX, targetSpineY);
-          ctx.bezierCurveTo(rcp1x, targetSpineY, rcp2x, rowTargetY, rightEdgeX, rowTargetY);
+          ctx.moveTo(bracketRightX, spineY);
+          ctx.bezierCurveTo(rcp1x, spineY, rcp2x, matrixTargetY, rightEdgeX, matrixTargetY);
           ctx.stroke();
 
-          if (isActiveStock && !highlightedStrandMeta) {
+          if (activeSym && stock && stock.symbol === activeSym && !highlightedStrandMeta) {
             highlightedStrandMeta = {
               stock,
               isBull,
-              cp1x,
-              cp1y,
-              cp2x,
-              cp2y,
-              targetSpineY,
+              laneIdx: i,
+              spineY,
               rcp1x,
               rcp2x,
-              rowTargetY,
+              matrixTargetY,
             };
           }
         }
       };
 
-      // Draw both Bullish and Bearish regions continuously so shifting midY animates both smoothly!
-      drawRegionStrands(true, topBound, bullRegionH, bullPool);
-      drawRegionStrands(false, midY, bearRegionH, bearPool);
+      drawPickedBracketGroup(true, bullPool, topBracketTop, topBracketBot, topBound, bullRegionH);
+      drawPickedBracketGroup(false, bearPool, botBracketTop, botBracketBot, midY, bearRegionH);
 
-      // 3. Highlight the Active Hovered/Pinned Stock's Chart Flow Beam on Canvas
+      // =========================================================================
+      // 4. Right-Side Sorted Vertical Spine (Maximum Gains at Top -> 0 -> Maximum Losses at Bottom)
+      //    + Glowing Top Green [ ] & Bottom Red [ ] Selection Brackets
+      // =========================================================================
+      // Subtle dotted matrix inside the dark concave lens between spineX and bracketRightX
+      ctx.fillStyle = 'rgba(148, 184, 168, 0.12)';
+      for (let lx = spineX + 6; lx < bracketRightX - 2; lx += 5) {
+        for (let ly = topBound + 6; ly < botBound - 6; ly += 5) {
+          ctx.fillRect(lx, ly, 1, 1);
+        }
+      }
+
+      // Faint dotted vertical right boundary of the spine column (at bracketRightX)
+      ctx.save();
+      ctx.setLineDash([1.5, 2.5]);
+      ctx.strokeStyle = 'rgba(148, 184, 168, 0.26)';
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      ctx.moveTo(bracketRightX, topBound);
+      ctx.lineTo(bracketRightX, botBound);
+      ctx.stroke();
+      ctx.restore();
+
+      // Horizontal sorted gain/loss bars along spineX -> bracketRightX
+      const spineBarsCount = Math.max(90, Math.floor(totalSpan / 3.2));
+      const spineStepY = totalSpan / spineBarsCount;
+
+      for (let i = 0; i <= spineBarsCount; i++) {
+        const y = topBound + i * spineStepY;
+        const isTop = y <= midY;
+        if (isTop && bullRegionH < 6) continue;
+        if (!isTop && bearRegionH < 6) continue;
+
+        let barLen = 0;
+        let alpha = 0.45;
+
+        if (isTop) {
+          if (y <= topBracketBot) {
+            // Inside the Top Green Selection Bracket [ ]: maximum gains span full bracket width
+            const bFrac = (y - topBracketTop) / Math.max(1, topBracketH);
+            barLen = bracketW * (0.98 - bFrac * 0.08);
+            alpha = 0.78 - bFrac * 0.16;
+          } else {
+            // Taper smoothly from topBracketBot down to 0 at midY (concave silhouette)
+            const t = (y - topBracketBot) / Math.max(1, midY - topBracketBot);
+            barLen = bracketW * 0.68 * Math.pow(Math.max(0, 1 - t), 1.55);
+            alpha = 0.18 + (1 - t) * 0.42;
+          }
+          ctx.fillStyle = `rgba(25, 245, 158, ${alpha.toFixed(2)})`;
+        } else {
+          if (y >= botBracketTop) {
+            // Inside the Bottom Red Selection Bracket [ ]: maximum losses span full bracket width
+            const bFrac = (y - botBracketTop) / Math.max(1, botBracketH);
+            barLen = bracketW * (0.90 + bFrac * 0.08);
+            alpha = 0.62 + bFrac * 0.18;
+          } else {
+            // Grow smoothly from 0 at midY down to botBracketTop (concave silhouette)
+            const t = (y - midY) / Math.max(1, botBracketTop - midY);
+            barLen = bracketW * 0.68 * Math.pow(Math.max(0, t), 1.55);
+            alpha = 0.18 + t * 0.42;
+          }
+          ctx.fillStyle = `rgba(255, 71, 105, ${alpha.toFixed(2)})`;
+        }
+
+        if (barLen >= 1.2) {
+          ctx.fillRect(spineX + 0.5, y - 0.8, barLen, 1.75);
+        }
+      }
+
+      // Main glowing vertical spine axis line at spineX
+      ctx.strokeStyle = 'rgba(226, 241, 255, 0.72)';
+      ctx.lineWidth = 1.25;
+      ctx.beginPath();
+      ctx.moveTo(spineX, topBound);
+      ctx.lineTo(spineX, botBound);
+      ctx.stroke();
+
+      // Helper to draw the glowing [ ] selection brackets at the very TOP and very BOTTOM of the spine
+      const drawSelectionBracket = (bTop, bBot, isBull) => {
+        if (bBot - bTop < 16) return;
+        const col = isBull ? '#19f59e' : '#ff4769';
+        const glowFill = isBull ? 'rgba(25, 245, 158, 0.10)' : 'rgba(255, 71, 105, 0.10)';
+        const serif = 6;
+
+        ctx.save();
+        ctx.fillStyle = glowFill;
+        ctx.fillRect(spineX, bTop, bracketW, bBot - bTop);
+
+        ctx.strokeStyle = col;
+        ctx.lineWidth = 1.8;
+        ctx.shadowColor = col;
+        ctx.shadowBlur = 10;
+
+        // Left bracket wall [
+        ctx.beginPath();
+        ctx.moveTo(spineX + serif, bTop);
+        ctx.lineTo(spineX, bTop);
+        ctx.lineTo(spineX, bBot);
+        ctx.lineTo(spineX + serif, bBot);
+        ctx.stroke();
+
+        // Right bracket wall ]
+        ctx.beginPath();
+        ctx.moveTo(bracketRightX - serif, bTop);
+        ctx.lineTo(bracketRightX, bTop);
+        ctx.lineTo(bracketRightX, bBot);
+        ctx.lineTo(bracketRightX - serif, bBot);
+        ctx.stroke();
+
+        // Crisp white corner ticks + interior sparkle dots (matches screenshot)
+        ctx.shadowBlur = 4;
+        ctx.fillStyle = '#ffffff';
+        const sparkles = [
+          [spineX + bracketW * 0.35, bTop + (bBot - bTop) * 0.28],
+          [spineX + bracketW * 0.68, bTop + (bBot - bTop) * 0.52],
+          [spineX + bracketW * 0.44, bTop + (bBot - bTop) * 0.78],
+        ];
+        for (const [sx, sy] of sparkles) {
+          ctx.beginPath();
+          ctx.arc(sx, sy, 1.2, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+      };
+
+      if (bullRegionH > 30) {
+        drawSelectionBracket(topBracketTop, topBracketBot, true);
+      }
+      if (bearRegionH > 30) {
+        drawSelectionBracket(botBracketTop, botBracketBot, false);
+      }
+
+      // =========================================================================
+      // 5. Center 0 Horizon Line + Glowing White Comet Streak + Matrix Split Curve
+      // =========================================================================
+      if (currentSplitRatio > 0.02 && currentSplitRatio < 0.98) {
+        const horizonAlpha = Math.min(0.85, Math.min(currentSplitRatio, 1 - currentSplitRatio) * 2.5);
+        ctx.save();
+        ctx.strokeStyle = `rgba(218, 238, 255, ${horizonAlpha.toFixed(2)})`;
+        ctx.lineWidth = 1.25;
+        ctx.beginPath();
+        ctx.moveTo(originX, midY);
+        ctx.lineTo(bracketRightX, midY);
+        // Smooth S-curve from (bracketRightX, midY) to the Matrix split line
+        const splitTargetY = midY;
+        ctx.bezierCurveTo(
+          bracketRightX + (rightEdgeX - bracketRightX) * 0.4,
+          midY,
+          bracketRightX + (rightEdgeX - bracketRightX) * 0.6,
+          splitTargetY,
+          rightEdgeX,
+          splitTargetY
+        );
+        ctx.stroke();
+
+        // Glowing White Comet Streak along the 0 horizon line (matches screenshot)
+        const cometHeadX = originX + streamSpanX * 0.61;
+        const cometTailX = originX + streamSpanX * 0.36;
+        const cometGrad = ctx.createLinearGradient(cometTailX, midY, cometHeadX, midY);
+        cometGrad.addColorStop(0, 'rgba(255, 255, 255, 0)');
+        cometGrad.addColorStop(0.7, 'rgba(200, 238, 255, 0.65)');
+        cometGrad.addColorStop(1, 'rgba(255, 255, 255, 1)');
+        ctx.strokeStyle = cometGrad;
+        ctx.lineWidth = 2.8;
+        ctx.shadowColor = '#ffffff';
+        ctx.shadowBlur = 10;
+        ctx.beginPath();
+        ctx.moveTo(cometTailX, midY);
+        ctx.lineTo(cometHeadX, midY);
+        ctx.stroke();
+
+        // Glowing white intersection dots at originX, cometHeadX, spineX, and bracketRightX
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(originX, midY, 2.8, 0, Math.PI * 2);
+        ctx.arc(cometHeadX, midY, 2.3, 0, Math.PI * 2);
+        ctx.arc(spineX, midY, 2.5, 0, Math.PI * 2);
+        ctx.arc(bracketRightX, midY, 2.8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      // =========================================================================
+      // 6. Highlight Active Hovered / Pinned Stock's Trajectory + Bracket Node
+      // =========================================================================
       if (highlightedStrandMeta) {
         const h = highlightedStrandMeta;
         const col = h.isBull ? '#19f59e' : '#ff4769';
         ctx.save();
         ctx.strokeStyle = col;
-        ctx.lineWidth = 2.6;
+        ctx.lineWidth = 2.4;
         ctx.shadowColor = col;
         ctx.shadowBlur = 10;
 
         ctx.beginPath();
         ctx.moveTo(originX, midY);
-        ctx.bezierCurveTo(h.cp1x, h.cp1y, h.cp2x, h.cp2y, spineX, h.targetSpineY);
+        for (let s = 1; s <= 20; s++) {
+          const t = s / 20;
+          const x = originX + t * streamSpanX;
+          const y = evalWavyTrajectoryY(t, midY, h.spineY, h.stock, h.isBull, nowMs, h.laneIdx);
+          ctx.lineTo(x, y);
+        }
+        ctx.lineTo(bracketRightX, h.spineY);
         ctx.stroke();
 
         ctx.beginPath();
-        ctx.moveTo(spineX, h.targetSpineY);
-        ctx.bezierCurveTo(h.rcp1x, h.targetSpineY, h.rcp2x, h.rowTargetY, rightEdgeX, h.rowTargetY);
+        ctx.moveTo(bracketRightX, h.spineY);
+        ctx.bezierCurveTo(h.rcp1x, h.spineY, h.rcp2x, h.matrixTargetY, rightEdgeX, h.matrixTargetY);
         ctx.stroke();
 
-        // Glowing node + stock flow callout tag on the spine
         ctx.fillStyle = '#ffffff';
         ctx.beginPath();
-        ctx.arc(spineX, h.targetSpineY, 3.6, 0, Math.PI * 2);
+        ctx.arc(spineX, h.spineY, 3.2, 0, Math.PI * 2);
+        ctx.arc(bracketRightX, h.spineY, 3.2, 0, Math.PI * 2);
         ctx.fill();
 
-        const label = `${h.stock.symbol} · Buy ${Math.round(h.stock.buyPct ?? 50)}%`;
-        ctx.font = '700 9px ui-monospace, SFMono-Regular, Menlo, monospace';
+        const label = `${h.stock.symbol} (${fmtPct(h.stock.chgPct)})`;
+        ctx.font = '700 8.5px ui-monospace, SFMono-Regular, Menlo, monospace';
         const tw = ctx.measureText(label).width + 10;
-        const lx = Math.max(8, spineX - tw - 8);
-        const ly = Math.max(18, Math.min(canvasH - 18, h.targetSpineY));
-        ctx.fillStyle = 'rgba(3, 10, 14, 0.88)';
+        const lx = Math.max(originX + 6, spineX - tw - 6);
+        const ly = Math.max(16, Math.min(canvasH - 18, h.spineY));
+        ctx.fillStyle = 'rgba(3, 10, 14, 0.9)';
         ctx.fillRect(lx, ly - 8, tw, 15);
         ctx.strokeStyle = col;
         ctx.lineWidth = 0.9;
@@ -1449,71 +1867,38 @@
         ctx.restore();
       }
 
-      // 4. Glowing Horizontal Horizon Line (shifts smoothly down/up with midY!)
-      if (currentSplitRatio > 0.02 && currentSplitRatio < 0.98) {
-        const horizonAlpha = Math.min(0.78, Math.min(currentSplitRatio, 1 - currentSplitRatio) * 2.4);
-        ctx.strokeStyle = `rgba(226, 241, 255, ${horizonAlpha.toFixed(2)})`;
-        ctx.lineWidth = 1.35;
-        ctx.beginPath();
-        ctx.moveTo(originX, midY);
-        ctx.lineTo(rightEdgeX, midY);
-        ctx.stroke();
-
-        ctx.fillStyle = '#ffffff';
-        ctx.beginPath();
-        ctx.arc(originX, midY, 2.8, 0, Math.PI * 2);
-        ctx.arc(spineX, midY, 2.6, 0, Math.PI * 2);
-        ctx.fill();
-      }
-
-      // 5. Animated Flowing Particles Driven by Each Stock's Real Order-Flow Velocity
+      // =========================================================================
+      // 7. Animated Flowing Particles Along the Picked Top/Bottom Trajectories
+      // =========================================================================
       for (const p of particles) {
         const isBull = p.bull;
         const regionH = isBull ? bullRegionH : bearRegionH;
-        if (regionH < 8) continue;
+        if (regionH < 12) continue;
 
         const pool = isBull ? bullPool : bearPool;
-        const stock = pool.length ? pool[p.lane % pool.length] : null;
+        if (!pool.length) continue;
+        const laneIdx = p.lane % pool.length;
+        const stock = pool[laneIdx];
         const m = getStockChartFlowMetrics(stock, isBull);
 
         if (!animPaused) {
-          p.t += p.baseSpeed * (0.65 + m.flowWeight * 0.95);
+          p.t += p.baseSpeed * (0.65 + m.flowWeight * 0.9);
           if (p.t >= 1) p.t -= 1;
         }
 
-        const lanesCount = Math.max(12, Math.min(24, pool.length || 16));
-        const laneIdx = p.lane % lanesCount;
-        const frac = (laneIdx + 0.5) / lanesCount;
-        const regionStartY = isBull ? topBound : midY;
-        const pad = Math.min(10, regionH * 0.06);
-        const targetSpineY = regionStartY + pad + frac * Math.max(2, regionH - pad * 2);
-        const regionRatio = regionH / totalSpan;
+        const bracketTop = isBull ? topBracketTop : botBracketTop;
+        const bracketBot = isBull ? topBracketBot : botBracketBot;
+        const bSpan = Math.max(8, bracketBot - bracketTop - 4);
+        const spineSlotFrac = isBull ? (laneIdx + 0.5) / pool.length : 1 - (laneIdx + 0.5) / pool.length;
+        const targetSpineY = bracketTop + 2 + spineSlotFrac * bSpan;
 
-        const t = p.t;
-        const inv = 1 - t;
-        const cp1x = originX + (spineX - originX) * 0.34;
-        const baseCp1y = isBull
-          ? midY - (midY - targetSpineY) * (0.78 + m.pressureNorm * 0.16)
-          : midY + (targetSpineY - midY) * (0.78 + m.pressureNorm * 0.16);
-        const cp1y = baseCp1y - m.midInfl * 14 * regionRatio;
-        const cp2x = originX + (spineX - originX) * 0.68;
-        const cp2y = targetSpineY - m.endSlope * 10 * regionRatio + p.amp;
-
-        const px =
-          inv * inv * inv * originX +
-          3 * inv * inv * t * cp1x +
-          3 * inv * t * t * cp2x +
-          t * t * t * spineX;
-        const py =
-          inv * inv * inv * midY +
-          3 * inv * inv * t * cp1y +
-          3 * inv * t * t * cp2y +
-          t * t * t * targetSpineY;
+        const px = originX + p.t * streamSpanX;
+        const py = evalWavyTrajectoryY(p.t, midY, targetSpineY, stock, isBull, nowMs, laneIdx);
 
         const isAct = Boolean(activeSym && stock && stock.symbol === activeSym);
         ctx.fillStyle = isAct ? '#ffffff' : isBull ? '#19f59e' : '#ff4769';
         ctx.beginPath();
-        ctx.arc(px, py, isAct ? 2.5 : 1.1 + m.flowWeight * 1.1, 0, Math.PI * 2);
+        ctx.arc(px, py, isAct ? 2.2 : 1.0 + m.flowWeight * 0.85, 0, Math.PI * 2);
         ctx.fill();
       }
     }
@@ -1704,12 +2089,14 @@
   });
 
   els.sortOrderSelect?.addEventListener('change', () => {
-    sortOrder = els.sortOrderSelect.value || 'FLOW_SCORE';
+    sortOrder = els.sortOrderSelect.value || 'MAX_GAINS';
     refreshFilteredViews();
     showToast(
       sortOrder === 'OB_STRENGTH'
-        ? '🧱 Sorted by Strongest Order Block'
-        : '⚡ Sorted by Strongest Flow'
+        ? '🧱 Sorted by Strongest Order Block (Top Bulls & Bottom Bears)'
+        : sortOrder === 'FLOW_SCORE'
+        ? '⚡ Sorted by Strongest Flow (Top Bulls & Bottom Bears)'
+        : '📈 Sorted by Max Gains / Bulls & Bears (Picking top & bottom leaders)'
     );
   });
 
@@ -1717,11 +2104,11 @@
     selectedSector = 'ALL';
     hoveredSector = null;
     filterMode = 'ALL';
-    sortOrder = 'FLOW_SCORE';
+    sortOrder = 'MAX_GAINS';
     searchQuery = '';
     if (els.searchInput) els.searchInput.value = '';
     if (els.sectorSelect) els.sectorSelect.value = 'ALL';
-    if (els.sortOrderSelect) els.sortOrderSelect.value = 'FLOW_SCORE';
+    if (els.sortOrderSelect) els.sortOrderSelect.value = 'MAX_GAINS';
     document
       .querySelectorAll('.ob-pill[data-filter-mode]')
       .forEach(b => b.classList.toggle('active', b.dataset.filterMode === 'ALL'));

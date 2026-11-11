@@ -84,6 +84,15 @@ function createDashboardServer(appController) {
         return sendJson(res, 200, appController.getPublicState());
       }
 
+      // 5-Stage Visual Funnel Live Snapshot (/api/ob/live/snapshot)
+      if (req.method === 'GET' && (pathname === '/api/ob/live/snapshot' || pathname === '/api/ob/sample/snapshot')) {
+        const sector = parsedUrl.searchParams.get('sector') || 'ALL';
+        const side = parsedUrl.searchParams.get('side') || 'ALL';
+        const sort = parsedUrl.searchParams.get('sort') || 'MAX_GAINS';
+        const snap = appController.getOrderBlockFunnelSnapshot({ sector, side, sort });
+        return sendJson(res, 200, snap);
+      }
+
       // Stock detail (candles + OBs + depth + profile)
       if (req.method === 'GET' && pathname.startsWith('/api/stock/')) {
         const symbol = decodeURIComponent(pathname.slice('/api/stock/'.length)).toUpperCase();

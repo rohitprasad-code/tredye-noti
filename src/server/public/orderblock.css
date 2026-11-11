@@ -453,33 +453,33 @@ body {
 /* Left Sector Pills Stack */
 .sector-nodes-stack {
   position: absolute;
-  left: 16px;
-  width: 118px;
+  left: 34px;
+  width: 116px;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 2.5px;
   z-index: 10;
-  max-height: calc(50% - 14px);
+  max-height: calc(50% - 16px);
   overflow: hidden;
 }
 .sector-nodes-stack.top {
-  top: 10px;
+  top: 8px;
 }
 .sector-nodes-stack.bottom {
-  bottom: 10px;
+  bottom: 16px;
   justify-content: flex-end;
 }
 
 .sector-hud-node {
-  background: rgba(6, 18, 20, 0.86);
-  border: 1px solid rgba(25, 245, 158, 0.28);
-  border-radius: 4px;
-  padding: 2px 5px;
+  background: rgba(5, 13, 17, 0.88);
+  border: 1px solid rgba(25, 245, 158, 0.25);
+  border-radius: 3px;
+  padding: 2px 4px;
   cursor: pointer;
   transition: transform 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
 }
 .sector-hud-node.bear {
-  border-color: rgba(255, 71, 105, 0.28);
+  border-color: rgba(255, 71, 105, 0.25);
 }
 .sector-hud-node:hover,
 .sector-hud-node.active {
@@ -496,7 +496,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 0.58rem;
+  font-size: 0.54rem;
   font-weight: 700;
   letter-spacing: 0.03em;
 }
@@ -505,83 +505,47 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 74px;
+  max-width: 68px;
 }
-.shn-pct.up { color: var(--up); }
-.shn-pct.dn { color: var(--dn); }
+.shn-pct {
+  padding: 0 3px;
+  border-radius: 2px;
+  font-size: 0.5rem;
+  font-weight: 800;
+  line-height: 1.25;
+}
+.shn-pct.up {
+  color: #032215;
+  background: var(--up);
+}
+.shn-pct.dn {
+  color: #2a040c;
+  background: var(--dn);
+}
 
 .shn-bars {
-  display: flex;
-  gap: 2px;
+  display: grid;
+  grid-template-columns: repeat(10, 1fr);
+  gap: 1.5px;
   margin-top: 2px;
-  height: 4px;
+  height: 3.5px;
 }
 .shn-seg {
-  flex: 1;
-  border-radius: 1px;
+  border-radius: 0.8px;
   background: rgba(255, 255, 255, 0.08);
 }
 .shn-seg.on-up {
   background: var(--up);
-  box-shadow: 0 0 4px var(--up);
+  box-shadow: 0 0 3px rgba(25, 245, 158, 0.55);
 }
 .shn-seg.on-dn {
   background: var(--dn);
-  box-shadow: 0 0 4px var(--dn);
+  box-shadow: 0 0 3px rgba(255, 71, 105, 0.55);
 }
 
-/* Central Spine Glowing [ ] Brackets */
+/* Central Spine Glowing [ ] Brackets are rendered directly on #flowStreamCanvas for pixel-exact alignment */
 .spine-bracket {
-  position: absolute;
-  left: 69%;
-  transform: translateX(-50%);
-  width: 56px;
-  height: 82px;
-  pointer-events: none;
-  z-index: 8;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.spine-bracket.bull-bracket {
-  top: 18px;
-  border-top: 2px solid var(--up);
-  border-bottom: 2px solid var(--up);
-  box-shadow: inset 0 0 18px rgba(25, 245, 158, 0.25), 0 0 14px rgba(25, 245, 158, 0.32);
-  background: rgba(25, 245, 158, 0.06);
-}
-.spine-bracket.bear-bracket {
-  bottom: 18px;
-  border-top: 2px solid var(--dn);
-  border-bottom: 2px solid var(--dn);
-  box-shadow: inset 0 0 18px rgba(255, 71, 105, 0.25), 0 0 14px rgba(255, 71, 105, 0.32);
-  background: rgba(255, 71, 105, 0.06);
-}
-.spine-bracket::before,
-.spine-bracket::after {
-  content: "";
-  position: absolute;
-  top: -3px;
-  bottom: -3px;
-  width: 7px;
-  border: 2px solid currentColor;
-}
-.spine-bracket.bull-bracket { color: var(--up); }
-.spine-bracket.bear-bracket { color: var(--dn); }
-.spine-bracket::before {
-  left: -2px;
-  border-right: none;
-}
-.spine-bracket::after {
-  right: -2px;
-  border-left: none;
-}
-.sb-label {
-  font-size: 0.56rem;
-  font-weight: 800;
-  padding: 1px 4px;
-  border-radius: 3px;
-  background: rgba(3, 9, 12, 0.85);
+  display: none;
 }
 
 /* COLUMN 2: Middle 4-Column Bullish & Bearish Stock Matrix */
