@@ -4,9 +4,17 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Order Block</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter+Tight:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/vendor/fonts/barlow-condensed/latin-600.css">
+<link rel="stylesheet" href="/vendor/fonts/barlow-condensed/latin-700.css">
+<link rel="stylesheet" href="/vendor/fonts/inter-tight/latin-500.css">
+<link rel="stylesheet" href="/vendor/fonts/inter-tight/latin-600.css">
+<link rel="stylesheet" href="/vendor/fonts/inter-tight/latin-700.css">
+<link rel="stylesheet" href="/vendor/fonts/inter-tight/latin-800.css">
+<link rel="stylesheet" href="/vendor/fonts/jetbrains-mono/latin-400.css">
+<link rel="stylesheet" href="/vendor/fonts/jetbrains-mono/latin-500.css">
+<link rel="stylesheet" href="/vendor/fonts/jetbrains-mono/latin-600.css">
+<link rel="stylesheet" href="/vendor/fonts/jetbrains-mono/latin-700.css">
+<script src="/vendor/gsap.min.js"></script>
 <style>
 :root{
   --bg:#04060A; --bg-2:#070A10; --panel:#0A0F17; --raised:#0F1622; --hair:#1A2433; --grid:#121A26;
@@ -33,16 +41,16 @@ body.stacked{overflow-x:hidden;overflow-y:auto;height:auto;min-height:100%}
 /* #grain removed for GPU performance */
 
 /* ---------- stage ---------- */
-#stage{position:absolute;left:0;top:0;width:1920px;height:1080px;transform-origin:0 0;overflow:hidden;contain:layout paint}
+#stage{position:absolute;left:0;top:0;width:1920px;height:1080px;transform-origin:0 0;overflow:hidden;contain:layout paint;will-change:transform}
 body.stacked #stage{display:none}
 #stage .L{position:absolute;inset:0;pointer-events:none}
 #lyBase{background:var(--bg)}
-#lyLight{inset:-24px!important;background:radial-gradient(1100px 800px at 1654px 50%, rgba(70,110,200,.075), transparent 70%);will-change:transform;transition:transform .9s var(--ease)}
+#lyLight{inset:-24px!important;background:radial-gradient(1100px 800px at 1654px 50%, rgba(70,110,200,.075), transparent 70%)}
 #lyHalves{background:
   radial-gradient(520px 360px at 1630px 26%, rgba(25,229,140,.09), transparent),
   radial-gradient(520px 360px at 1630px 74%, rgba(255,59,92,.09), transparent)}
 #lyVig{background:linear-gradient(90deg, rgba(0,0,0,.35), transparent 35%)}
-#topRail{position:absolute;left:24px;width:1872px;top:8px;height:1px;background:linear-gradient(90deg, rgba(232,241,255,.05), rgba(232,241,255,.22) 72%, rgba(232,241,255,.10))}
+#topRail{position:absolute;left:16px;right:16px;top:4px;height:1px;background:linear-gradient(90deg, rgba(232,241,255,.05), rgba(232,241,255,.22) 72%, rgba(232,241,255,.10))}
 canvas.cv{position:absolute;display:block;pointer-events:none}
 
 /* ---------- crest ---------- */
@@ -1114,15 +1122,13 @@ body.stacked #obTopControls { display: none; }
 .ob-top-bar {
   position: fixed;
   top: 0; left: 0; right: 0;
-  height: 40px;
-  background: rgba(7, 10, 15, 0.94);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+  height: 36px;
+  background: rgba(7, 10, 15, 0.98);
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 16px;
+  padding: 0 12px;
   z-index: 100;
   font-family: var(--f-ui, "Inter Tight", -apple-system, sans-serif);
   user-select: none;
@@ -3011,10 +3017,11 @@ function buildModel(D) {
 /* ================= layout(Hd): every rect & y ================= */
 const CREST2_DY = 46;
 function layout(Hd, M) {
-  const G = { Hd, W: 1920 };
+  const W = Math.max(1920, (S && S.W) || 1920);
+  const G = { Hd, W };
   // text-lifted screens (S.crest2) give the index grid its own crest row, so the plume starts lower
-  G.crest2 = !!S.crest2; G.T0 = 104; G.T1 = Hd - 48; G.P = (G.T1 - G.T0) / Math.max(1, M.lanes.length); G.yT = G.T0 + M.nBullAll * G.P;
-  G.bandTop = 20; G.bandBot = Hd - 28;
+  G.crest2 = !!S.crest2; G.T0 = 96; G.T1 = Hd - 12; G.P = (G.T1 - G.T0) / Math.max(1, M.lanes.length); G.yT = G.T0 + M.nBullAll * G.P;
+  G.bandTop = 8; G.bandBot = Hd - 8;
   G.anomRow = M.mos.bear.c1.some(s => s.event);
   if (M.sideMode === "BULL") {
     G.bullH = G.bandBot - G.bandTop;
@@ -3030,7 +3037,7 @@ function layout(Hd, M) {
     G.bullH = Math.round((G.bandBot - G.bandTop - 28) * (G.anomRow ? 0.4761 : 0.5));
     G.yS = G.bandTop + G.bullH + 14; G.bearTop = G.bandTop + G.bullH + 28; G.bearH = G.bandBot - G.bearTop;
   }
-  G.A = { x0: 66, x1: 590 }; G.nowX = 590; G.gateX = 690; G.lensX1 = 810; G.C = { x0: 810, x1: 1340 }; G.D = { x0: 1368, x1: 1896 };
+  G.A = { x0: 66, x1: 590 }; G.nowX = 590; G.gateX = 690; G.lensX1 = 810; G.C = { x0: 810, x1: 1340 }; G.D = { x0: 1368, x1: W - 16 };
   G.reactor = { x: 1354, y: G.yS };
   G.cols = { c4: { x: 810, w: 94 }, c3: { x: 910, w: 114 }, c2: { x: 1030, w: 132 }, c1: { x: 1168, w: 172 } };
   // text-lifted screens: #1 keeps ~1.4x the #2/#3 height (not ~1.6x) so the lifted #2/#3 text keeps a full chip column
@@ -3060,7 +3067,7 @@ function layout(Hd, M) {
     ev.forEach(s => { G.tiles.push({ s, key: 'c1', x: 1168, y, w: 172, h: hA, side: -1, event: true }); y += hA + 6; }); }
   G.tileBy = {}; G.tiles.forEach(t => { G.tileBy[t.s.s] = t; t.cy = t.y + t.h / 2; });
   // tickets row-aligned with c1 tiles
-  G.tickets = G.tiles.filter(t => t.key === 'c1').map(t => ({ s: t.s, x: 1368, y: t.y, w: 528, h: t.h, side: t.side, pick: t.pick, event: t.event, cy: t.cy }));
+  G.tickets = G.tiles.filter(t => t.key === 'c1').map(t => ({ s: t.s, x: G.D.x0, y: t.y, w: G.D.x1 - G.D.x0, h: t.h, side: t.side, pick: t.pick, event: t.event, cy: t.cy }));
   G.ticketBy = {}; G.tickets.forEach(t => G.ticketBy[t.s.s] = t);
   // warped axis Q
   const kn = [];
@@ -3108,7 +3115,7 @@ const FONT_UI = "'Inter Tight',-apple-system,'SF Pro Display','Segoe UI',Roboto,
 const FONT_NUM = "'JetBrains Mono','SF Mono',Menlo,Consolas,monospace";
 const FONT_TK = "'Barlow Condensed','Arial Narrow','Roboto Condensed',sans-serif";
 
-const S = { s: 1, dpr: 1, k: 1, Hd: 1080, tx: 1, stacked: false, reduced: false, tier3: true };
+const S = { s: 1, dpr: 1, k: 1, W: 1920, Hd: 1080, tx: 1, stacked: false, reduced: false, tier3: true };
 const $ = (sel, root = document) => root.querySelector(sel);
 function el(tag, cls, parent, html) { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; if (parent) parent.appendChild(e); return e; }
 function css(e, o) { for (const k in o) e.style[k] = typeof o[k] === 'number' && !/opacity|zIndex/.test(k) ? o[k] + 'px' : o[k]; return e; }
@@ -3831,7 +3838,7 @@ function spinePts(G) {
 }
 function drawSpine(M, G, wrap) {
   const sy0 = Math.min(G.yT, G.yS) - 40, sy1 = Math.max(G.yT, G.yS) + 40;
-  const { cv, ctx } = stageCanvas(wrap, 40, sy0, 1880, sy1 - sy0, 'clip');
+  const { cv, ctx } = stageCanvas(wrap, 40, sy0, (G.W || 1920) - 40, sy1 - sy0, 'clip');
   cv.id = 'cvSpine';
   const path = () => { ctx.beginPath(); ctx.moveTo(66, G.yT); ctx.lineTo(690, G.yT); ctx.bezierCurveTo(750, G.yT, 750, G.yS, 810, G.yS); ctx.lineTo(1354, G.yS); };
   ctx.lineCap = 'round';
@@ -3842,8 +3849,8 @@ function drawSpine(M, G, wrap) {
   ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(590, G.yT); ctx.lineTo(690, G.yT); ctx.bezierCurveTo(750, G.yT, 750, G.yS, 810, G.yS); ctx.stroke();
   ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(810, G.yS); ctx.lineTo(1354, G.yS); ctx.stroke();
   // tail through D gutter
-  const g = ctx.createLinearGradient(1354, 0, 1896, 0); g.addColorStop(0, 'rgba(255,255,255,.9)'); g.addColorStop(1, 'rgba(255,255,255,.25)');
-  ctx.save(); ctx.shadowColor = 'rgba(169,184,255,.8)'; ctx.shadowBlur = 6 * S.k; ctx.strokeStyle = g; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(1354, G.yS); ctx.lineTo(1896, G.yS); ctx.stroke(); ctx.restore();
+  const g = ctx.createLinearGradient(1354, 0, G.D.x1, 0); g.addColorStop(0, 'rgba(255,255,255,.9)'); g.addColorStop(1, 'rgba(255,255,255,.25)');
+  ctx.save(); ctx.shadowColor = 'rgba(169,184,255,.8)'; ctx.shadowBlur = 6 * S.k; ctx.strokeStyle = g; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(1354, G.yS); ctx.lineTo(G.D.x1, G.yS); ctx.stroke(); ctx.restore();
   return cv;
 }
 
@@ -4821,7 +4828,7 @@ function chainFor(s) {
 }
 function buildFx() {
   const wrap = $('#fxWrap'); wrap.innerHTML = '';
-  const o = stageCanvas(wrap, 0, 0, 1920, G.Hd, ''); o.cv.id = 'cvFx'; FX.cv = o.cv; FX.ctx = o.ctx;
+  const o = stageCanvas(wrap, 0, 0, (G && G.W) || 1920, G.Hd, ''); o.cv.id = 'cvFx'; FX.cv = o.cv; FX.ctx = o.ctx;
   FX.sprites = { 1: glowSprite(SC[1], 5), '-1': glowSprite(SC[-1], 5), w: glowSprite('232,241,255', 6), a: glowSprite('255,176,32', 5) };
   // particle paths
   FX.paths = []; const cw = 524 / 125;
@@ -4883,7 +4890,7 @@ function fxLoop(now) {
   FX.frameAvg = FX.frameAvg * 0.95 + dt * 0.05;
   if (FX.show) showUpdate(now);
   const ctx = FX.ctx; if (!ctx) return;
-  ctx.clearRect(0, 0, 1920, G.Hd);
+  ctx.clearRect(0, 0, (G && G.W) || 1920, G.Hd);
   if (FX.ambient && !S.reduced) {
     // parallax handled by mouse; shimmer
     if (obState() === 'LIVE') { if (now - SHIM_LAST > 100) { SHIM_LAST = now; shimmerStep(now); } shimmerUpdate(now); }
@@ -4937,7 +4944,8 @@ function drawPackets(ctx, now) {
 function drawSweep(ctx, now) {
   const per = 12000, dur = 2400; const t = (now - SWEEP_T0) % per;
   if (t > dur) { FX.sweepHit = {}; return; }
-  const f = t / dur; const e = -(Math.cos(Math.PI * f) - 1) / 2; const x = 24 + e * (1896 - 24);
+  const xEnd = (G && G.D && G.D.x1) || 1896;
+  const f = t / dur; const e = -(Math.cos(Math.PI * f) - 1) / 2; const x = 24 + e * (xEnd - 24);
   const g = ctx.createLinearGradient(x - 60, 0, x + 60, 0); g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(.5, 'rgba(255,255,255,.06)'); g.addColorStop(1, 'rgba(255,255,255,0)');
   ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = g; ctx.fillRect(x - 60, 0, 120, G.Hd); ctx.restore();
   FX.sweepHit = FX.sweepHit || {};
@@ -5147,7 +5155,7 @@ function startShow() {
   // bridges + tickets
   const TB = 3520;
   at(TB, () => { addIn('#nReactor'); nodeFlare('nReactor'); addIn('.bridge'); });
-  tw(TB, 650, f => setClip(spine, 1354 + (1920 - 1354) * f));
+  tw(TB, 650, f => setClip(spine, 1354 + (((G && G.W) || 1920) - 1354) * f));
   const order = [[1, 1], [-1, 1], [1, 2], [-1, 2], [1, 3], [-1, 3]];
   order.forEach(([side, n], i) => {
     const tk = G.tickets.find(x => !x.event && x.side === side && x.pick === n); if (!tk || !tk.el) return;
@@ -5205,7 +5213,7 @@ function applyBrush(h, e) {
     st.querySelectorAll('[data-k="' + (M.eventSym || '~') + '"]').forEach(x => x.classList.add('lit'));
   }
 }
-function hideInspector() { const i = $('#inspector'); if (i) i.classList.remove('on'); }
+function hideInspector() { const i = $('#inspector'); if (i) { i.classList.remove('on'); i._at = null; } }
 function inspectorHTML(s) {
   const L = s.L; const rank = s.event ? '⊘ event' : `#${s.rank}/${s.side > 0 ? M.nBull : M.nBear}${s.side < 0 ? ' ex-⊘' : ''}`;
   const hi = s.event ? '255,106,77' : SCHI[s.side];
@@ -5287,6 +5295,7 @@ function placeInspector(e) {
   const W = i.offsetWidth || (i.classList.contains('wide') ? 420 : 330);
   const H = i.offsetHeight || 280;
   const M8 = 16;
+  const GW = (G && G.W) || 1920;
   const Hd = (G && G.Hd) || 1080;
 
   // Smooth floating tooltip: directly follows cursor with boundary clamping
@@ -5294,10 +5303,10 @@ function placeInspector(e) {
   let py = y + 16;
 
   // Flip to the left if near the right edge
-  if (px + W > 1920 - M8) {
+  if (px + W > GW - M8) {
     px = x - W - 24;
   }
-  px = clamp(px, M8, 1920 - W - M8);
+  px = clamp(px, M8, GW - W - M8);
 
   // Flip above if near bottom
   if (py + H > Hd - M8) {
@@ -5305,11 +5314,21 @@ function placeInspector(e) {
   }
   py = clamp(py, M8, Hd - H - M8);
 
+  const firstShow = !i._at;
   i._fixed = null;
   i._at = [x, y];
   i._atG = G;
-  css(i, { left: Math.round(px), top: Math.round(py) });
-  i.style.opacity = "1";
+  if (window.gsap) {
+    if (firstShow) {
+      gsap.set(i, { left: Math.round(px), top: Math.round(py), opacity: 0, scale: 0.97 });
+      gsap.to(i, { opacity: 1, scale: 1, duration: 0.16, ease: 'power3.out', overwrite: 'auto' });
+    } else {
+      gsap.to(i, { left: Math.round(px), top: Math.round(py), opacity: 1, scale: 1, duration: 0.12, ease: 'power3.out', overwrite: 'auto' });
+    }
+  } else {
+    css(i, { left: Math.round(px), top: Math.round(py) });
+    i.style.opacity = "1";
+  }
 }
 function bindInteractions() {
   const st = $('#stage'); if (st._bound) return; st._bound = true;
@@ -5335,10 +5354,6 @@ function bindInteractions() {
     if ((e.key === 'r' || e.key === 'R') && !e.metaKey && !e.ctrlKey && !S.stacked) startShow();
   });
   const br = $('#brand'); st.addEventListener('dblclick', e => { if (e.target.closest('#brand, #crest .pulse')) startShow(); });
-  window.addEventListener('mousemove', e => {
-    if (S.stacked || S.reduced) return; const ly = $('#lyLight'); if (!ly) return;
-    const dx = (e.clientX / window.innerWidth - .5) * 24, dy = (e.clientY / window.innerHeight - .5) * 24; ly.style.transform = `translate(${dx.toFixed(1)}px,${dy.toFixed(1)}px)`;
-  });
   document.addEventListener('visibilitychange', () => { if (document.hidden) FX.running = false; else if (!FX.running && !S.stacked) { FX.running = true; FX.last = 0; requestAnimationFrame(fxLoop); } });
 }
 
@@ -7587,16 +7602,8 @@ function obControlsMount() {
       const prevSide = (OBF_FEED.filter && OBF_FEED.filter.side) || "ALL";
       if (nextSide === prevSide) return;
       pills.forEach(p => p.classList.toggle("on", p === btn));
-      // Smooth physical flow transition on #stage
-      const st = document.getElementById("stage");
-      if (st) {
-        const shiftY = nextSide === "BULL" ? 36 : nextSide === "BEAR" ? -36 : 0;
-        st.style.transform = `scale(${S.s}) translateY(${shiftY}px)`;
-        st.style.opacity = "0.75";
-        setTimeout(() => {
-          st.style.transform = `scale(${S.s})`;
-          st.style.opacity = "1";
-        }, 140);
+      if (window.gsap) {
+        gsap.fromTo("#tickets, #ladderWrap, #plumeWrap", { opacity: 0.52 }, { opacity: 1, duration: 0.24, ease: "power2.out", overwrite: "auto" });
       }
       OBF_FEED.load({ side: nextSide });
     });
@@ -7662,26 +7669,33 @@ function computeScale() {
   if (!S.stacked) {
     const railEl = document.getElementById('obSideRail');
     const LEFT_RAIL_W = railEl ? (document.body.classList.contains('rail-expanded') ? 190 : 50) : 0;
-    const TOP_BAR_H = 40;
+    const TOP_BAR_H = 36;
     const availH = Math.max(400, H - TOP_BAR_H);
     const availW = Math.max(600, W - LEFT_RAIL_W);
-    S.s = Math.min(availW / 1920, availH / 1080);
-    S.Hd = 1080;
+    if (availW / 1920 <= availH / 1080) {
+      S.s = availW / 1920;
+      S.W = 1920;
+      S.Hd = Math.max(920, Math.round(availH / S.s));
+    } else {
+      S.s = availH / 1080;
+      S.Hd = 1080;
+      S.W = Math.max(1920, Math.round(availW / S.s));
+    }
     S.tx = S.s >= 0.95 ? 1 : Math.min(1.18, 1 / Math.sqrt(S.s));
     S.k = S.s * S.dpr;
     S.tier3 = S.s >= 0.8;
     S.crest2 = S.tx >= 1.15;
-    S.left = LEFT_RAIL_W + Math.max(0, (availW - 1920 * S.s) / 2);
-    S.top = TOP_BAR_H + Math.max(0, (availH - 1080 * S.s) / 2);
+    S.left = LEFT_RAIL_W;
+    S.top = TOP_BAR_H;
   }
 }
 function renderStage() {
   const st = $('#stage'), obKeep = obFindKeep();
   if (typeof FX !== 'undefined') { FX.hover = null; FX.pinned = null; }
   if (typeof PH !== 'undefined') PH.gen++;
-  st.classList.remove('brush'); const ins = $('#inspector'); if (ins) ins.classList.remove('on');
+  st.classList.remove('brush'); const ins = $('#inspector'); if (ins) { ins.classList.remove('on'); ins._at = null; }
   G = layout(S.Hd, M);
-  css(st, { width: 1920, height: S.Hd, left: S.left, top: S.top }); st.style.transform = `scale(${S.s})`;
+  css(st, { width: G.W, height: S.Hd, left: S.left, top: S.top }); st.style.transform = `scale(${S.s})`;
   st.classList.toggle('t3off', !S.tier3); st.style.setProperty('--tx', S.tx); st.style.setProperty('--txc', S.crest2 ? Math.min(S.tx, 1.3) : Math.min(S.tx, 1.08)); st.classList.toggle('crest2', !!S.crest2);
   document.documentElement.style.setProperty('--tx', S.tx);
   buildCrest(M, G, $('#crest'));
@@ -7725,7 +7739,7 @@ function boot() {
   };
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { if (!started) go(); else lateFonts(); });
   setTimeout(go, 20);
-  let to = null; window.addEventListener('resize', () => { clearTimeout(to); to = setTimeout(() => { if (started) rerender(true); else go(); }, 120); });
+  let to = null; window.addEventListener('resize', () => { clearTimeout(to); to = setTimeout(() => { if (started) rerender(true); else go(); }, 75); });
 }
 let LATE_FONTS = false;
 function lateFonts() {

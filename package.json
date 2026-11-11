@@ -3,11 +3,22 @@
   "version": "1.0.0",
   "description": "Order-flow reminder notifications from Tredye Pulse. Never places trades.",
   "private": true,
-  "engines": { "node": ">=22.5" },
+  "engines": {
+    "node": ">=22.5"
+  },
   "scripts": {
     "start": "node --env-file-if-exists=.env src/index.js",
     "demo": "node src/index.js --demo",
     "dry-run": "node --env-file-if-exists=.env src/index.js --dry-run",
     "test": "node --test test/engine.test.js"
+  },
+  "dependencies": {
+    "@fontsource/barlow-condensed": "^5.3.0",
+    "@fontsource/inter-tight": "^5.3.0",
+    "@fontsource/jetbrains-mono": "^5.3.0",
+    "compression": "^1.8.2",
+    "express": "^5.3.0",
+    "gsap": "^3.15.1",
+    "lucide": "^1.72.0"
   }
 }
