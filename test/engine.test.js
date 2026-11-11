@@ -6,6 +6,7 @@ const { evaluateConfluence, scoreAndRankUniverse } = require('../src/engine/flow
 const { detectOrderBlocks, locateActionableOB } = require('../src/engine/orderblocks');
 const { SignalEngine } = require('../src/engine/signals');
 const { FlowStore } = require('../src/store/db');
+const { buildOrderBlockRealData } = require('../src/index');
 const { createSampleDataset, buildBullishOBCandles, buildBearishOBCandles } = require('../data/sample-fixture');
 
 test('evaluateConfluence matches Tredye sI() 5-signal bull/bear scoring', () => {
@@ -185,5 +186,57 @@ test('My Tracker evaluates SELL_WATCH (step-back reminder) and BUY_WATCH (buy at
 
   store.close();
 });
+
+test('buildOrderBlockRealData rejects stale prior-day bars instead of spiking the last candle to live LTP', () => {
+  const prevDayBars = Array.from({ length: 75 }, (_, i) => ({
+    iso: `2026-11-09T09:${String(15 + (i % 45)).padStart(2, '0')}:00+05:30`,
+    o: 610,
+    h: 611.5,
+    l: 609.5,
+    c: 611,
+    v: 10000,
+  }));
+
+  // Case 1: quoteDate is newer than rawBars date
+  assert.equal(
+    buildOrderBlockRealData(prevDayBars, {
+      isBull: true,
+      ltp: 663.75,
+      prevClose: 611,
+      quoteDate: '2026-11-11',
+    }),
+    null
+  );
+
+  // Case 2: even without quoteDate, full session closing on prevClose with large LTP jump is rejected
+  assert.equal(
+    buildOrderBlockRealData(prevDayBars, {
+      isBull: true,
+      ltp: 663.75,
+      prevClose: 611,
+    }),
+    null
+  );
+
+  // Case 3: same-day bars matching the live session succeed without fabricating a spike
+  const sameDayBars = prevDayBars.map((b, i) => ({
+    ...b,
+    iso: `2026-11-11T09:${String(15 + (i % 45)).padStart(2, '0')}:00+05:30`,
+    o: 660,
+    h: 664,
+    l: 659,
+    c: 663.5,
+  }));
+  const realX = buildOrderBlockRealData(sameDayBars, {
+    isBull: true,
+    ltp: 663.75,
+    prevClose: 611,
+    quoteDate: '2026-11-11',
+  });
+  assert.ok(realX);
+  assert.equal(realX.k.c[realX.k.c.length - 1], 663.75);
+  assert.ok(realX.k.h[realX.k.h.length - 1] <= 664);
+});
+
 
 

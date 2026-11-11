@@ -77,8 +77,26 @@ function round2(n) {
   return Math.round(Number(n) * 100) / 100;
 }
 
-function buildOrderBlockRealData(rawBars, { isBull, ltp, prevClose }) {
+function istBarDate(bar) {
+  if (!bar) return '';
+  if (typeof bar.iso === 'string' && /^\d{4}-\d{2}-\d{2}/.test(bar.iso)) {
+    return bar.iso.slice(0, 10);
+  }
+  const ts = Number(bar.ts);
+  if (Number.isFinite(ts) && ts > 0) {
+    return new Date(ts + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
+  }
+  return '';
+}
+
+function buildOrderBlockRealData(rawBars, { isBull, ltp, prevClose, quoteDate } = {}) {
   if (!Array.isArray(rawBars) || rawBars.length < 2) return null;
+  const lastRaw = rawBars[rawBars.length - 1];
+  const lastBarDate = istBarDate(lastRaw);
+  if (quoteDate && lastBarDate && lastBarDate < quoteDate) {
+    return null;
+  }
+
   const bars = rawBars.slice(-75).map(b => ({
     o: Number(b.o),
     h: Number(b.h),
@@ -87,7 +105,18 @@ function buildOrderBlockRealData(rawBars, { isBull, ltp, prevClose }) {
     v: Number(b.v || 0),
   }));
   const n = bars.length;
-  const live = Number(ltp || bars[n - 1].c);
+  const lastClose = bars[n - 1].c;
+  const live = Number(ltp || lastClose);
+  const prev = Number(prevClose || 0);
+  if (
+    prev > 0 &&
+    n >= 60 &&
+    Math.abs(lastClose - prev) <= Math.max(0.05, prev * 0.0025) &&
+    Math.abs(live - lastClose) > Math.max(0.5, lastClose * 0.008)
+  ) {
+    return null;
+  }
+
   bars[n - 1].c = live;
   bars[n - 1].h = Math.max(bars[n - 1].h, live);
   bars[n - 1].l = Math.min(bars[n - 1].l, live);
@@ -805,10 +834,12 @@ class TredyeFlowService {
       };
 
       if (isTop && candleMap.has(c.symbol)) {
+        const quoteDate = this.state.stocksBySymbol.get(c.symbol)?.quoteDate || '';
         const realX = buildOrderBlockRealData(candleMap.get(c.symbol), {
           isBull,
           ltp,
           prevClose: prev,
+          quoteDate,
         });
         if (realX) {
           item.x = realX;
@@ -1443,6 +1474,7 @@ class TredyeFlowService {
       if (q.oi > 0) s.oi = q.oi;
       if (q.depth) s.depth = q.depth;
       if (q.volume > 0) s.volume = q.volume;
+      if (q.lastTradeDate) s.quoteDate = q.lastTradeDate;
       updated++;
     }
     return updated;
@@ -1637,4 +1669,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { TredyeFlowService };
+module.exports = { TredyeFlowService, buildOrderBlockRealData };

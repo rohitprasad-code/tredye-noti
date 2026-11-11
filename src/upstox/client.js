@@ -9,6 +9,15 @@ const protobuf = require('protobufjs');
 const UPSTOX_API_BASE = 'https://api.upstox.com';
 const INSTRUMENTS_NSE_URL = 'https://assets.upstox.com/market-quote/instruments/exchange/NSE.json.gz';
 const PROTO_PATH = path.join(__dirname, 'MarketDataFeedV3.proto');
+const IST_OFFSET_MS = 5.5 * 3600 * 1000;
+
+function istDateStr(tsOrIso) {
+  const num = typeof tsOrIso === 'string' && !/^\d+$/.test(tsOrIso.trim())
+    ? Date.parse(tsOrIso)
+    : Number(tsOrIso);
+  if (!Number.isFinite(num) || num <= 0) return '';
+  return new Date(num + IST_OFFSET_MS).toISOString().slice(0, 10);
+}
 
 class UpstoxClient {
   constructor(options = {}) {
@@ -353,6 +362,9 @@ class UpstoxClient {
         const tsq = Number(val.total_sell_quantity || 0);
         const buyPct = tbq > 0 && tsq > 0 ? (tbq / (tbq + tsq)) * 100 : null;
 
+        const lastTradeDate =
+          istDateStr(val.last_trade_time) || istDateStr(val.timestamp) || '';
+
         out[sym] = {
           symbol: sym,
           instrumentKey: instKey,
@@ -369,6 +381,7 @@ class UpstoxClient {
           tsq,
           buy_pct: buyPct !== null ? Number(buyPct.toFixed(2)) : null,
           depth: val.depth || null,
+          lastTradeDate,
         };
       }
     }
@@ -443,16 +456,24 @@ class UpstoxClient {
         }
 
         if (!raw || raw.length === 0) {
-          const istNow = new Date(Date.now() + 5.5 * 3600 * 1000);
-          const toDate = istNow.toISOString().slice(0, 10);
-          const fromDate = new Date(istNow.getTime() - 7 * 86400 * 1000).toISOString().slice(0, 10);
-          const hist = await this.apiRequest(
-            `/v3/historical-candle/${encodeURIComponent(key)}/minutes/${interval}/${toDate}/${fromDate}`
-          );
-          const allRaw = hist?.data?.candles;
-          if (Array.isArray(allRaw) && allRaw.length > 0) {
-            const latestDay = String(allRaw[0][0] || '').slice(0, 10);
-            raw = allRaw.filter(bar => String(bar[0] || '').startsWith(latestDay));
+          const toDate = istDateStr(Date.now() + 86400 * 1000);
+          for (const lookbackDays of [3, 10]) {
+            const fromDate = istDateStr(Date.now() - lookbackDays * 86400 * 1000);
+            const hist = await this.apiRequest(
+              `/v3/historical-candle/${encodeURIComponent(key)}/minutes/${interval}/${toDate}/${fromDate}`
+            );
+            const allRaw = hist?.data?.candles;
+            if (Array.isArray(allRaw) && allRaw.length > 0) {
+              let latestDay = '';
+              for (const bar of allRaw) {
+                const day = String(bar[0] || '').slice(0, 10);
+                if (day > latestDay) latestDay = day;
+              }
+              if (latestDay) {
+                raw = allRaw.filter(bar => String(bar[0] || '').startsWith(latestDay));
+                break;
+              }
+            }
           }
         }
 
