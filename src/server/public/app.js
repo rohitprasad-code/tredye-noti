@@ -138,7 +138,11 @@
 
   function renderHeaderAndBanner(state) {
     // Source badge
-    if (state.sourceMode === 'LIVE') {
+    if (state.sourceMode === 'UPSTOX_LIVE') {
+      els.sourceBadge.className = 'badge badge-up';
+      els.sourceBadge.textContent = state.upstox?.wsConnected ? '⚡ UPSTOX WS LIVE' : '⚡ UPSTOX LIVE';
+      els.connectionBanner.classList.add('hidden');
+    } else if (state.sourceMode === 'LIVE') {
       els.sourceBadge.className = 'badge badge-up';
       els.sourceBadge.textContent = '● LIVE TREDYE';
       els.connectionBanner.classList.add('hidden');
@@ -991,15 +995,84 @@
     });
   });
 
+  const refreshUpstoxUI = () => {
+    const u = appState?.upstox || {};
+    const badge = document.getElementById('upstoxBadge');
+    const redirEl = document.getElementById('upstoxRedirectPreview');
+    const disBtn = document.getElementById('upstoxDisconnectBtn');
+    const keyInput = document.getElementById('upstoxApiKey');
+    if (redirEl && u.redirectUri) redirEl.textContent = u.redirectUri;
+    if (keyInput && !keyInput.value && u.apiKeyPreview && u.hasApiKey) {
+      keyInput.placeholder = `Saved (${u.apiKeyPreview})`;
+    }
+    if (badge) {
+      if (u.connected) {
+        badge.className = 'badge badge-bull';
+        badge.textContent = `Connected${u.user?.userName ? ' · ' + u.user.userName : ''}${u.wsConnected ? ' · WS Live' : ''}`;
+      } else if (u.configured) {
+        badge.className = 'badge badge-warn';
+        badge.textContent = 'Keys saved · Login required';
+      } else {
+        badge.className = 'badge badge-neutral';
+        badge.textContent = 'Not connected';
+      }
+    }
+    if (disBtn) disBtn.style.display = u.connected ? 'inline-flex' : 'none';
+  };
+
   const openCredModal = () => {
     if (appState?.configuredEmail) {
       document.getElementById('credEmail').value = appState.configuredEmail;
     }
+    refreshUpstoxUI();
     els.credStatusMsg.textContent = '';
     els.credentialsDialog.showModal();
   };
   els.openCredentialsBtn.addEventListener('click', openCredModal);
   els.bannerConnectBtn.addEventListener('click', openCredModal);
+
+  const copyRedirBtn = document.getElementById('copyUpstoxRedirectBtn');
+  if (copyRedirBtn) {
+    copyRedirBtn.addEventListener('click', () => {
+      const txt = document.getElementById('upstoxRedirectPreview')?.textContent || 'http://localhost:4600/api/upstox/callback';
+      navigator.clipboard?.writeText(txt).catch(() => {});
+      copyRedirBtn.textContent = 'Copied!';
+      setTimeout(() => { copyRedirBtn.textContent = 'Copy'; }, 1500);
+    });
+  }
+
+  const upstoxConnectBtn = document.getElementById('upstoxConnectBtn');
+  if (upstoxConnectBtn) {
+    upstoxConnectBtn.addEventListener('click', async () => {
+      const apiKey = document.getElementById('upstoxApiKey')?.value.trim() || '';
+      const apiSecret = document.getElementById('upstoxApiSecret')?.value.trim() || '';
+      const redirectUri = document.getElementById('upstoxRedirectPreview')?.textContent?.trim() || 'http://localhost:4600/api/upstox/callback';
+      els.credStatusMsg.style.color = 'var(--text-muted)';
+      els.credStatusMsg.textContent = 'Saving Upstox keys & preparing login…';
+      const res = await fetch('/api/upstox/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey: apiKey || undefined, apiSecret: apiSecret || undefined, redirectUri }),
+      });
+      const data = await res.json();
+      if (!data.ok || !data.authUrl) {
+        els.credStatusMsg.style.color = 'var(--down)';
+        els.credStatusMsg.textContent = 'Please paste both Upstox API Key and API Secret first.';
+        return;
+      }
+      window.location.href = data.authUrl;
+    });
+  }
+
+  const upstoxDisconnectBtn = document.getElementById('upstoxDisconnectBtn');
+  if (upstoxDisconnectBtn) {
+    upstoxDisconnectBtn.addEventListener('click', async () => {
+      await fetch('/api/upstox/disconnect', { method: 'POST' });
+      els.credStatusMsg.style.color = 'var(--text-muted)';
+      els.credStatusMsg.textContent = 'Upstox disconnected.';
+      refreshUpstoxUI();
+    });
+  }
 
   els.openSettingsBtn.addEventListener('click', () => {
     const cfg = appState?.config || {};

@@ -2299,11 +2299,16 @@ body.rail-expanded .ob-top-bar {
     try {
       var es = new EventSource("/api/events");
       var lastPoll = 0;
+      var lastReloadAt = 0;
       es.addEventListener("state", function (ev) {
         try {
           var st = JSON.parse(ev.data);
           if (st && st.lastPollAt && st.lastPollAt !== lastPoll) {
-            if (lastPoll !== 0) load();
+            var now = Date.now();
+            if (lastPoll !== 0 && now - lastReloadAt >= 2500) {
+              lastReloadAt = now;
+              load();
+            }
             lastPoll = st.lastPollAt;
           }
         } catch (e) {}

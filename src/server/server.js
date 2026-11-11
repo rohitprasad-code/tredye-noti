@@ -69,14 +69,17 @@ function createDashboardServer(appController) {
   });
 
   // 5-Stage Visual Funnel Live Snapshot (/api/ob/live/snapshot)
-  app.get(['/api/ob/live/snapshot', '/api/ob/sample/snapshot'], (req, res) => {
-    const sector = String(req.query.sector || 'ALL');
-    const side = String(req.query.side || 'ALL');
-    const sort = String(req.query.sort || 'MAX_GAINS');
-    const snap = appController.getOrderBlockFunnelSnapshot({ sector, side, sort });
-    res.set('Cache-Control', 'no-store');
-    res.json(snap);
-  });
+  app.get(
+    ['/api/ob/live/snapshot', '/api/ob/sample/snapshot'],
+    asyncHandler(async (req, res) => {
+      const sector = String(req.query.sector || 'ALL');
+      const side = String(req.query.side || 'ALL');
+      const sort = String(req.query.sort || 'MAX_GAINS');
+      const snap = await appController.getOrderBlockFunnelSnapshot({ sector, side, sort });
+      res.set('Cache-Control', 'no-store');
+      res.json(snap);
+    })
+  );
 
   // Stock detail (candles + OBs + depth + profile)
   app.get(
@@ -180,6 +183,65 @@ function createDashboardServer(appController) {
       res.json(resCred);
     })
   );
+
+  // Upstox OAuth2 & Real-time Feed Endpoints
+  app.get('/api/upstox/status', (_req, res) => {
+    res.set('Cache-Control', 'no-store');
+    res.json({ ok: true, status: appController.getUpstoxStatus() });
+  });
+
+  app.post('/api/upstox/config', (req, res) => {
+    const body = req.body || {};
+    const out = appController.updateUpstoxConfig(body);
+    res.json(out);
+  });
+
+  app.get('/api/upstox/login', (_req, res) => {
+    try {
+      const url = appController.upstox.getAuthUrl();
+      res.redirect(302, url);
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  app.get(
+    '/api/upstox/callback',
+    asyncHandler(async (req, res) => {
+      const { code, error, error_description: errorDesc } = req.query;
+      if (error) {
+        return res
+          .status(400)
+          .send(
+            `<!doctype html><body style="background:#04060A;color:#EEF3FA;font-family:sans-serif;padding:40px">` +
+              `<h2 style="color:#FF3B5C">Upstox Authorization Failed</h2>` +
+              `<p>${String(errorDesc || error)}</p>` +
+              `<a href="/" style="color:#19E58C">Return to Alert Desk</a></body>`
+          );
+      }
+      if (!code) {
+        return res.status(400).send('Missing Upstox authorization code.');
+      }
+      const { profile } = await appController.completeUpstoxOAuth(String(code));
+      res.send(
+        `<!doctype html><body style="background:#04060A;color:#EEF3FA;font-family:-apple-system,sans-serif;padding:40px">` +
+          `<h2 style="color:#19E58C">Upstox Real-Time Feed Connected</h2>` +
+          `<p>Signed in as <strong>${profile.user_name || profile.user_id || 'Upstox User'}</strong>.</p>` +
+          `<p>Live quotes &amp; WebSocket V3 feed are now active on your local terminal.</p>` +
+          `<div style="margin-top:20px;display:flex;gap:12px">` +
+            `<a href="/app/orderblock" style="padding:10px 16px;background:#19E58C;color:#04060A;font-weight:700;border-radius:8px;text-decoration:none">Open Order Block Terminal</a>` +
+            `<a href="/" style="padding:10px 16px;border:1px solid #1A2433;color:#EEF3FA;border-radius:8px;text-decoration:none">Alert Desk</a>` +
+          `</div>` +
+          `<script>setTimeout(function(){ window.location.href = '/app/orderblock'; }, 1600);</script>` +
+        `</body>`
+      );
+    })
+  );
+
+  app.post('/api/upstox/disconnect', (_req, res) => {
+    const status = appController.disconnectUpstox();
+    res.json({ ok: true, status });
+  });
 
   // My Tracker CRUD endpoints (Sell / Step-Back & Buy at Right Time)
   app.get('/api/tracker', (_req, res) => {

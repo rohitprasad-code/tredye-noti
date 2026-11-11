@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { getMarketStatus } = require('./market/hours');
 const { TredyeClient } = require('./tredye/client');
+const { UpstoxClient } = require('./upstox/client');
 const { scoreAndRankUniverse } = require('./engine/flow');
 const { locateActionableOB } = require('./engine/orderblocks');
 const { SignalEngine } = require('./engine/signals');
@@ -72,6 +73,190 @@ function loadDefaultConfig() {
   }
 }
 
+function round2(n) {
+  return Math.round(Number(n) * 100) / 100;
+}
+
+function buildOrderBlockRealData(rawBars, { isBull, ltp, prevClose }) {
+  if (!Array.isArray(rawBars) || rawBars.length < 2) return null;
+  const bars = rawBars.slice(-75).map(b => ({
+    o: Number(b.o),
+    h: Number(b.h),
+    l: Number(b.l),
+    c: Number(b.c),
+    v: Number(b.v || 0),
+  }));
+  const n = bars.length;
+  const live = Number(ltp || bars[n - 1].c);
+  bars[n - 1].c = live;
+  bars[n - 1].h = Math.max(bars[n - 1].h, live);
+  bars[n - 1].l = Math.min(bars[n - 1].l, live);
+
+  const o = [];
+  const h = [];
+  const l = [];
+  const c = [];
+  const v = [];
+  const w = [];
+  const trs = [];
+  let dayH = -Infinity;
+  let dayL = Infinity;
+  let cumPV = 0;
+  let cumV = 0;
+
+  for (let i = 0; i < n; i++) {
+    const bar = bars[i];
+    o.push(round2(bar.o));
+    h.push(round2(bar.h));
+    l.push(round2(bar.l));
+    c.push(round2(bar.c));
+    v.push(Math.round(bar.v));
+    dayH = Math.max(dayH, bar.h);
+    dayL = Math.min(dayL, bar.l);
+    const vol = bar.v > 0 ? bar.v : 1;
+    const tp = (bar.h + bar.l + bar.c) / 3;
+    cumPV += tp * vol;
+    cumV += vol;
+    w.push(round2(cumPV / cumV));
+    const tr =
+      i === 0
+        ? bar.h - bar.l
+        : Math.max(bar.h - bar.l, Math.abs(bar.h - bars[i - 1].c), Math.abs(bar.l - bars[i - 1].c));
+    trs.push(tr);
+  }
+
+  const atrSlice = trs.slice(-14);
+  const rawAtr = atrSlice.reduce((s, x) => s + x, 0) / Math.max(1, atrSlice.length);
+  const rangeFallback = Math.max((dayH - dayL) / 10, live * 0.003);
+  const atr = Math.max(0.05, round2(rawAtr > 0 ? rawAtr : rangeFallback));
+
+  // Find strongest directional displacement candle and its base Order Block candle
+  let bestScore = -Infinity;
+  let kB = Math.max(0, Math.min(n - 3, Math.floor(n * 0.55)));
+  const maxIdx = Math.max(1, n - 2);
+  for (let i = 1; i <= maxIdx; i++) {
+    const disp = isBull ? bars[i].c - bars[i].o : bars[i].o - bars[i].c;
+    const nextDisp = i + 1 < n ? (isBull ? bars[i + 1].c - bars[i + 1].o : bars[i + 1].o - bars[i + 1].c) : 0;
+    const base = bars[i - 1];
+    const oppositeBonus = (isBull ? base.c <= base.o : base.c >= base.o) ? atr * 0.35 : 0;
+    const recencyBonus = (i / n) * atr * 0.25;
+    const score = disp + Math.max(0, nextDisp) * 0.5 + oppositeBonus + recencyBonus;
+    if (score > bestScore) {
+      bestScore = score;
+      kB = i - 1;
+    }
+  }
+  kB = Math.max(0, Math.min(n - 2, kB));
+
+  let obLo = bars[kB].l;
+  let obHi = bars[kB].h;
+  if (obHi - obLo < atr * 0.15) {
+    const mid = (obLo + obHi) / 2;
+    obLo = mid - atr * 0.15;
+    obHi = mid + atr * 0.15;
+  }
+
+  // Morning breakout / origin block if earlier displacement exists
+  let kub = -1;
+  let kO = -1;
+  const earlyEnd = Math.min(kB - 2, Math.floor(n * 0.45));
+  if (earlyEnd >= 2) {
+    let earlyBest = 0;
+    for (let i = 1; i <= earlyEnd; i++) {
+      const d = isBull ? bars[i].c - bars[i].o : bars[i].o - bars[i].c;
+      if (d > earlyBest) {
+        earlyBest = d;
+        kub = i;
+      }
+    }
+    if (kub >= 1) {
+      for (let j = kub - 1; j >= Math.max(0, kub - 6); j--) {
+        if (isBull ? bars[j].c < bars[j].o : bars[j].c > bars[j].o) {
+          kO = j;
+          break;
+        }
+      }
+    }
+  }
+
+  // Pullback / retest candle after kB nearest the zone
+  let kd = n - 1;
+  let nearestDist = Infinity;
+  for (let i = kB + 2; i < n; i++) {
+    const dist = isBull ? Math.abs(bars[i].l - obHi) : Math.abs(bars[i].h - obLo);
+    if (dist <= nearestDist) {
+      nearestDist = dist;
+      kd = i;
+    }
+  }
+
+  // Fair-value gap right after kB if present
+  let f = [0, 0, -1, kd];
+  if (kB + 2 < n) {
+    if (isBull && bars[kB + 2].l > bars[kB].h) {
+      f = [round2(bars[kB].h), round2(bars[kB + 2].l), kB + 1, kd];
+    } else if (!isBull && bars[kB + 2].h < bars[kB].l) {
+      f = [round2(bars[kB + 2].h), round2(bars[kB].l), kB + 1, kd];
+    }
+  }
+
+  const vwapEnd = w[n - 1] || round2(live);
+  const zW = obHi - obLo;
+  const eLo = round2(obLo);
+  const eHi = round2(obHi);
+  const E = round2((obLo + obHi) / 2);
+  const spanCap = Math.max(atr * 3.2, (dayH - dayL) * 0.55, zW * 2.5);
+
+  let SL;
+  let T1;
+  let T2;
+  let oppLo;
+  let oppHi;
+  if (isBull) {
+    SL = round2(obLo - Math.max(atr * 0.4, zW * 0.22));
+    const R = Math.max(E - SL, atr * 0.5);
+    const rawT1 = Math.max(live + atr * 0.35, E + R * 1.45);
+    const rawT2 = Math.max(dayH + atr * 0.35, E + R * 2.35);
+    T1 = round2(Math.min(rawT1, dayH + spanCap * 0.55));
+    T2 = round2(Math.min(Math.max(rawT2, T1 + atr * 0.3), Math.max(dayH, live) + spanCap * 0.8));
+    oppLo = round2(T2 - atr * 0.35);
+    oppHi = round2(T2 + atr * 0.25);
+  } else {
+    SL = round2(obHi + Math.max(atr * 0.4, zW * 0.22));
+    const R = Math.max(SL - E, atr * 0.5);
+    const rawT1 = Math.min(live - atr * 0.35, E - R * 1.45);
+    const rawT2 = Math.min(dayL - atr * 0.35, E - R * 2.35);
+    T1 = round2(Math.max(rawT1, dayL - spanCap * 0.55));
+    T2 = round2(Math.max(Math.min(rawT2, T1 - atr * 0.3), Math.min(dayL, live) - spanCap * 0.8));
+    oppLo = round2(T2 - atr * 0.25);
+    oppHi = round2(T2 + atr * 0.35);
+  }
+
+  return {
+    z: [eLo, eHi],
+    e: [eLo, eHi, E],
+    sl: SL,
+    t: [T1, T2],
+    op: [oppLo, oppHi],
+    a: atr,
+    hl: [round2(Math.max(dayH, prevClose || dayH)), round2(Math.min(dayL, prevClose || dayL))],
+    vw: vwapEnd,
+    k: {
+      iv: 5,
+      o,
+      h,
+      l,
+      c,
+      v,
+      w,
+      b: kB,
+      g: kO,
+      u: kub,
+      f,
+    },
+  };
+}
+
 class TredyeFlowService {
   constructor(options = {}) {
     loadDotEnv();
@@ -86,6 +271,7 @@ class TredyeFlowService {
     this.config = { ...baseCfg, ...(savedCfg || {}) };
 
     this.client = new TredyeClient();
+    this.upstox = new UpstoxClient();
     this.signals = new SignalEngine({ db: this.store });
 
     // Runtime state for dashboard & inspector
@@ -112,6 +298,8 @@ class TredyeFlowService {
     this.pollTimer = null;
     this.reminderTimer = null;
     this.isPolling = false;
+    this.upstoxTickTimer = null;
+    this.pendingUpstoxTicks = {};
     this.seedStarterTrackerIfEmpty();
     this.seedStarterJournalIfEmpty();
   }
@@ -470,6 +658,7 @@ class TredyeFlowService {
       hasCredentials: this.client.hasCredentials(),
       configuredEmail: this.client.email || null,
       telegramConfigured: Boolean(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID),
+      upstox: this.upstox.getStatus(),
       lastError: this.state.lastError,
       lastPollAt: this.state.lastPollAt,
       nextPollAt: this.state.nextPollAt,
@@ -490,7 +679,7 @@ class TredyeFlowService {
     };
   }
 
-  getOrderBlockFunnelSnapshot({ sector = 'ALL', side = 'ALL', sort = 'MAX_GAINS' } = {}) {
+  async getOrderBlockFunnelSnapshot({ sector = 'ALL', side = 'ALL', sort = 'MAX_GAINS' } = {}) {
     const all = this.state.allRanked || [];
     const secStatsMap = new Map();
     for (const c of all) {
@@ -557,6 +746,26 @@ class TredyeFlowService {
     const maxContendersPerSide = normSector !== 'ALL' ? Math.min(20, Math.max(3, rawBulls.length)) : 20;
     const maxBearContenders = normSector !== 'ALL' ? Math.min(20, Math.max(3, rawBears.length)) : 20;
 
+    // Fetch genuine 1-day 5m Upstox candles for the displayed top contenders (tiles + hero tickets + popup)
+    const chartSymbols = [
+      ...rawBulls.slice(0, maxContendersPerSide).map(c => c.symbol),
+      ...rawBears.slice(0, maxBearContenders).map(c => c.symbol),
+    ];
+    let candleMap = new Map();
+    if (this.upstox?.isConnected() && chartSymbols.length > 0) {
+      candleMap = await this.upstox.fetchOneDayCandlesBatch(chartSymbols, 5, {
+        concurrency: 10,
+        ttlMs: 45000,
+      });
+    }
+
+    let maxBars = 0;
+    for (const bars of candleMap.values()) {
+      if (Array.isArray(bars) && bars.length > maxBars) {
+        maxBars = Math.min(75, bars.length);
+      }
+    }
+
     const formatStock = (c, idx, total, isBull) => {
       const ltp = Number(c.ltp || 100);
       let chg = Number(c.chgPct || 0);
@@ -574,8 +783,9 @@ class TredyeFlowService {
 
       const w = Number(Math.max(0.55, Math.min(4.2, 0.7 + Math.abs(Number(c.rupeeFlowCr || 1)) / 22)).toFixed(3));
       const maxTop = isBull ? Math.min(20, maxContendersPerSide) : Math.min(20, maxBearContenders);
+      const isTop = idx < maxTop;
 
-      return {
+      const item = {
         s: c.symbol,
         n: c.name || c.symbol,
         sec: String(c.sector || 'OTHER').toUpperCase(),
@@ -585,7 +795,7 @@ class TredyeFlowService {
         p,
         o: Number(prev.toFixed(2)),
         l: Number(ltp.toFixed(2)),
-        top: idx < maxTop,
+        top: isTop,
         fo: true,
         w,
         bu: c.buildup || (isBull ? 'LONG BUILD-UP' : 'SHORT BUILD-UP'),
@@ -593,6 +803,19 @@ class TredyeFlowService {
         flowCr: Number(c.rupeeFlowCr || 0),
         obStr: Number((isBull ? (c.bestBullOB?.str || c.primaryOB?.str) : (c.bestBearOB?.str || c.primaryOB?.str)) || 1.5),
       };
+
+      if (isTop && candleMap.has(c.symbol)) {
+        const realX = buildOrderBlockRealData(candleMap.get(c.symbol), {
+          isBull,
+          ltp,
+          prevClose: prev,
+        });
+        if (realX) {
+          item.x = realX;
+        }
+      }
+
+      return item;
     };
 
     const bullItems = rawBulls.map((c, i) => formatStock(c, i, rawBulls.length, true));
@@ -606,6 +829,7 @@ class TredyeFlowService {
     const hh = String(nowIst.getUTCHours()).padStart(2, '0');
     const mm = String(nowIst.getUTCMinutes()).padStart(2, '0');
     const ss = String(nowIst.getUTCSeconds()).padStart(2, '0');
+    const elMinutes = maxBars > 0 ? Math.min(375, Math.max(5, maxBars * 5)) : 375;
 
     return {
       meta: {
@@ -616,10 +840,11 @@ class TredyeFlowService {
           bullish: bullItems.length,
           bearish: bearItems.length,
           mosaic_cells: stocksOut.filter(s => s.top).length,
+          real_charts: candleMap.size,
         },
         status: 'live',
         clock: `${hh}:${mm}:${ss}`,
-        el: 375,
+        el: elMinutes,
         open: '09:15',
         close: '15:30',
         filter: { sector: normSector, side: String(side || 'ALL').toUpperCase(), sort },
@@ -699,6 +924,18 @@ class TredyeFlowService {
       }
     }
 
+    if (this.upstox.isConnected()) {
+      try {
+        const upCandles = await this.upstox.fetchIntradayCandles(sym, 'minutes', 3);
+        if (Array.isArray(upCandles) && upCandles.length > 0) {
+          detail = { ...(detail || { symbol: sym }), candles: upCandles, candle_min: 3 };
+          this.state.detailBySymbol.set(sym, detail);
+        }
+      } catch {
+        // fallback to existing detail
+      }
+    }
+
     const flow = this.state.flowBySymbol[sym];
     const obInfo = locateActionableOB(stock, detail, flow);
     this.state.obBySymbol.set(sym, obInfo);
@@ -766,6 +1003,24 @@ class TredyeFlowService {
       this.state.stocksBySymbol.clear();
       for (const s of stocks) {
         this.state.stocksBySymbol.set(s.symbol, s);
+      }
+
+      // Overlay real-time Upstox market quotes when connected
+      if (this.upstox.isConnected() && stocks.length > 0) {
+        try {
+          const quotes = await this.upstox.fetchQuotes(stocks.map(s => s.symbol));
+          this.mergeUpstoxTicks(quotes);
+          if (Object.keys(quotes).length > 0) {
+            this.state.sourceMode = 'UPSTOX_LIVE';
+          }
+          if (!this.dryRun && !this.upstox.wsConnected) {
+            this.ensureUpstoxWebSocket(stocks.map(s => s.symbol)).catch(() => {});
+          }
+        } catch (err) {
+          if (err.status === 401) {
+            this.upstox.lastError = err.message;
+          }
+        }
       }
 
       // Score and rank universe
@@ -1172,6 +1427,109 @@ class TredyeFlowService {
       loginResult,
       state: this.getPublicState(),
     };
+  }
+
+  mergeUpstoxTicks(ticks = {}) {
+    let updated = 0;
+    for (const [sym, q] of Object.entries(ticks)) {
+      const s = this.state.stocksBySymbol.get(sym);
+      if (!s || !q || !q.ltp) continue;
+      if (q.ltp > 0) s.ltp = q.ltp;
+      if (q.prev > 0) s.prev = q.prev;
+      if (q.chg_pct !== undefined) s.chg_pct = q.chg_pct;
+      else if (s.prev > 0) s.chg_pct = Number((((s.ltp - s.prev) / s.prev) * 100).toFixed(2));
+      if (q.vwap > 0) s.vwap = q.vwap;
+      if (q.buy_pct !== null && q.buy_pct !== undefined) s.buy_pct = q.buy_pct;
+      if (q.oi > 0) s.oi = q.oi;
+      if (q.depth) s.depth = q.depth;
+      if (q.volume > 0) s.volume = q.volume;
+      updated++;
+    }
+    return updated;
+  }
+
+  recomputeFromCurrentStocks() {
+    const stocks = [...this.state.stocksBySymbol.values()];
+    if (stocks.length === 0) return;
+    const ranked = scoreAndRankUniverse(stocks, this.config);
+    this.state.flowBySymbol = ranked.bySymbol;
+    this.state.sectors = ranked.sectors;
+    this.state.topBull = ranked.topBull.map(({ stock, flow }) => this.enrichCardItem(stock, flow));
+    this.state.topBear = ranked.topBear.map(({ stock, flow }) => this.enrichCardItem(stock, flow));
+    this.state.allRanked = ranked.rankedStocks.map(({ stock, flow }) => this.enrichCardItem(stock, flow));
+    this.recomputeTrackerState({ emitAlerts: false });
+    this.state.lastPollAt = Date.now();
+  }
+
+  async ensureUpstoxWebSocket(symbols) {
+    if (!this.upstox.isConnected()) return false;
+    const list = symbols && symbols.length ? symbols : [...this.state.stocksBySymbol.keys()];
+    return this.upstox.startWebSocket(list, ticks => {
+      Object.assign(this.pendingUpstoxTicks, ticks);
+      if (this.upstoxTickTimer) return;
+      this.upstoxTickTimer = setTimeout(() => {
+        this.upstoxTickTimer = null;
+        const batch = this.pendingUpstoxTicks;
+        this.pendingUpstoxTicks = {};
+        if (this.mergeUpstoxTicks(batch) > 0) {
+          this.state.sourceMode = 'UPSTOX_LIVE';
+          this.recomputeFromCurrentStocks();
+          this.broadcast('upstox_tick', {
+            ts: Date.now(),
+            symbols: Object.keys(batch),
+            upstox: this.upstox.getStatus(),
+          });
+          this.broadcast('state', this.getPublicState());
+        }
+      }, 900);
+    });
+  }
+
+  getUpstoxStatus() {
+    return this.upstox.getStatus();
+  }
+
+  updateUpstoxConfig({ apiKey, apiSecret, redirectUri, accessToken }) {
+    const envUpdates = {};
+    if (apiKey !== undefined) envUpdates.UPSTOX_API_KEY = String(apiKey).trim();
+    if (apiSecret !== undefined && apiSecret !== '') envUpdates.UPSTOX_API_SECRET = String(apiSecret).trim();
+    if (redirectUri !== undefined && String(redirectUri).trim()) {
+      envUpdates.UPSTOX_REDIRECT_URI = String(redirectUri).trim();
+    }
+    if (accessToken !== undefined && String(accessToken).trim()) {
+      envUpdates.UPSTOX_ACCESS_TOKEN = String(accessToken).trim();
+    }
+    saveDotEnvKeyValues(envUpdates);
+    this.upstox.updateConfig({ apiKey, apiSecret, redirectUri, accessToken });
+
+    if (this.upstox.isConnected() && !this.dryRun) {
+      this.ensureUpstoxWebSocket().catch(() => {});
+      this.runPollCycle({ manual: true }).catch(() => {});
+    }
+    this.broadcast('state', this.getPublicState());
+    return {
+      ok: true,
+      status: this.upstox.getStatus(),
+      authUrl: this.upstox.isConfigured() ? this.upstox.getAuthUrl() : null,
+    };
+  }
+
+  async completeUpstoxOAuth(code) {
+    const profile = await this.upstox.exchangeCode(code);
+    saveDotEnvKeyValues({ UPSTOX_ACCESS_TOKEN: this.upstox.accessToken });
+    if (!this.dryRun) {
+      await this.runPollCycle({ manual: true });
+      this.ensureUpstoxWebSocket().catch(() => {});
+    }
+    this.broadcast('state', this.getPublicState());
+    return { profile, status: this.upstox.getStatus() };
+  }
+
+  disconnectUpstox() {
+    this.upstox.clearToken();
+    saveDotEnvKeyValues({ UPSTOX_ACCESS_TOKEN: '' });
+    this.broadcast('state', this.getPublicState());
+    return this.upstox.getStatus();
   }
 
   async sendTestNotification(symbol) {
