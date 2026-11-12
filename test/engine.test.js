@@ -6,7 +6,7 @@ const { evaluateConfluence, scoreAndRankUniverse } = require('../src/engine/flow
 const { detectOrderBlocks, locateActionableOB } = require('../src/engine/orderblocks');
 const { SignalEngine } = require('../src/engine/signals');
 const { FlowStore } = require('../src/store/db');
-const { buildOrderBlockRealData } = require('../src/index');
+const { buildOrderBlockRealData, compareOrderBlockCandidates, computeSetupScore } = require('../src/index');
 const { createSampleDataset, buildBullishOBCandles, buildBearishOBCandles } = require('../data/sample-fixture');
 
 test('evaluateConfluence matches Tredye sI() 5-signal bull/bear scoring', () => {
@@ -237,6 +237,75 @@ test('buildOrderBlockRealData rejects stale prior-day bars instead of spiking th
   assert.equal(realX.k.c[realX.k.c.length - 1], 663.75);
   assert.ok(realX.k.h[realX.k.h.length - 1] <= 664);
 });
+
+test('compareOrderBlockCandidates ranks MAX_GAINS strictly by % move and FLOW_SCORE by confluence & strength', () => {
+  const hdfc = { symbol: 'HDFCBANK', chgPct: 0.5, rupeeFlowCr: 5243, agree: 4, strengthScore: 53.4 };
+  const paytm = { symbol: 'PAYTM', chgPct: 5.34, rupeeFlowCr: 294.7, agree: 4, strengthScore: 69.2 };
+  const abcap = { symbol: 'ABCAPITAL', chgPct: 5.76, rupeeFlowCr: 68.3, agree: 5, strengthScore: 65.6 };
+  const datap = { symbol: 'DATAPATTNS', chgPct: 5.18, rupeeFlowCr: -1330.4, agree: 3, strengthScore: 40.5 };
+
+  const byMaxGains = [hdfc, paytm, abcap, datap]
+    .slice()
+    .sort((a, b) => compareOrderBlockCandidates(a, b, true, 'MAX_GAINS'))
+    .map(x => x.symbol);
+  assert.deepEqual(byMaxGains, ['ABCAPITAL', 'PAYTM', 'DATAPATTNS', 'HDFCBANK']);
+
+  const byFlowScore = [hdfc, paytm, abcap, datap]
+    .slice()
+    .sort((a, b) => compareOrderBlockCandidates(a, b, true, 'FLOW_SCORE'))
+    .map(x => x.symbol);
+  assert.deepEqual(byFlowScore, ['ABCAPITAL', 'PAYTM', 'HDFCBANK', 'DATAPATTNS']);
+});
+
+test('evaluateConfluence computes depth imbalance from Upstox bid/ask depth arrays', () => {
+  const res = evaluateConfluence({
+    symbol: 'PAYTM',
+    ltp: 1890,
+    vwap: 1848,
+    poc: 1788,
+    buy_pct: 61.3,
+    cvd: 1559781,
+    imb: null,
+    flowScore: -5, // stale value should be ignored when live depth is present
+    depth: {
+      buy: [{ price: 1889.9, quantity: 3000 }],
+      sell: [{ price: 1890.1, quantity: 1000 }],
+    },
+  });
+  assert.equal(res.agree, 5);
+  assert.equal(res.side, 'BULL');
+  assert.equal(res.checks.find(c => c.key === 'imb')?.bull, true);
+});
+
+test('computeSetupScore and SETUP_SCORE sort reward aligned OB proximity + strong flow', () => {
+  const inZoneStrong = {
+    symbol: 'ICICIBANK',
+    chgPct: 2.5,
+    rupeeFlowCr: 500,
+    agree: 5,
+    strengthScore: 75,
+    bestBullOB: { status: 'IN_ZONE', distPct: 0, invalidated: false, mit: false },
+  };
+  const extendedStrong = {
+    symbol: 'ABCAPITAL',
+    chgPct: 5.5,
+    rupeeFlowCr: 100,
+    agree: 5,
+    strengthScore: 72,
+    bestBullOB: { status: 'UNTESTED', distPct: 4.2, invalidated: false, mit: false },
+  };
+
+  assert.equal(computeSetupScore(inZoneStrong, true), 75);
+  assert.equal(computeSetupScore(extendedStrong, true), 68.2);
+
+  const bySetup = [extendedStrong, inZoneStrong]
+    .slice()
+    .sort((a, b) => compareOrderBlockCandidates(a, b, true, 'SETUP_SCORE'))
+    .map(x => x.symbol);
+  assert.deepEqual(bySetup, ['ICICIBANK', 'ABCAPITAL']);
+});
+
+
 
 
 

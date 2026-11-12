@@ -19,6 +19,17 @@ function istDateStr(tsOrIso) {
   return new Date(num + IST_OFFSET_MS).toISOString().slice(0, 10);
 }
 
+/**
+ * Computes buy% and order-book imbalance from Upstox total buy/sell quantities.
+ */
+function computeOrderBookStats(tbq, tsq) {
+  const total = tbq + tsq;
+  if (total <= 0) return { buyPct: null, imb: null };
+  const buyPct = tbq > 0 && tsq > 0 ? Number(((tbq / total) * 100).toFixed(2)) : null;
+  const imb = Number((((tbq - tsq) / total) * 100).toFixed(2));
+  return { buyPct, imb };
+}
+
 class UpstoxClient {
   constructor(options = {}) {
     this.apiKey = (options.apiKey || process.env.UPSTOX_API_KEY || '').trim();
@@ -360,7 +371,7 @@ class UpstoxClient {
         const chgPct = prevClose > 0 ? ((ltp - prevClose) / prevClose) * 100 : 0;
         const tbq = Number(val.total_buy_quantity || 0);
         const tsq = Number(val.total_sell_quantity || 0);
-        const buyPct = tbq > 0 && tsq > 0 ? (tbq / (tbq + tsq)) * 100 : null;
+        const { buyPct, imb } = computeOrderBookStats(tbq, tsq);
 
         const lastTradeDate =
           istDateStr(val.last_trade_time) || istDateStr(val.timestamp) || '';
@@ -379,7 +390,8 @@ class UpstoxClient {
           oi: Number(val.oi || 0) || null,
           tbq,
           tsq,
-          buy_pct: buyPct !== null ? Number(buyPct.toFixed(2)) : null,
+          buy_pct: buyPct,
+          imb,
           depth: val.depth || null,
           lastTradeDate,
         };
@@ -611,7 +623,7 @@ class UpstoxClient {
             const chgPct = prev > 0 ? ((ltp - prev) / prev) * 100 : null;
             const tbq = Number(mff?.tbq || 0);
             const tsq = Number(mff?.tsq || 0);
-            const buyPct = tbq > 0 && tsq > 0 ? (tbq / (tbq + tsq)) * 100 : null;
+            const { buyPct, imb } = computeOrderBookStats(tbq, tsq);
 
             const dayOhlc = mff?.marketOHLC?.ohlc?.find(o => o.interval === '1d');
             let depth = null;
@@ -635,7 +647,8 @@ class UpstoxClient {
               oi: mff?.oi || undefined,
               tbq,
               tsq,
-              buy_pct: buyPct !== null ? Number(buyPct.toFixed(2)) : undefined,
+              buy_pct: buyPct !== null ? buyPct : undefined,
+              imb: imb !== null ? imb : undefined,
               depth,
             };
             count++;

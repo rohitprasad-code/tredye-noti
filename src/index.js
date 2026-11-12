@@ -286,6 +286,66 @@ function buildOrderBlockRealData(rawBars, { isBull, ltp, prevClose, quoteDate } 
   };
 }
 
+/**
+ * Computes a 0–100 Setup Score combining flow strength (60%),
+ * directional % momentum (20%), and aligned Order Block proximity/status (20%).
+ */
+function computeSetupScore(c, isBull) {
+  const flowPts = Math.max(0, Math.min(100, Number(c.strengthScore || 0))) * 0.6;
+  const absChg = Math.abs(Number(c.chgPct || 0));
+  const momPts = Math.min(1, absChg / 5) * 20;
+
+  const alignedOB = isBull
+    ? (c.bestBullOB || (c.primaryOB?.bull ? c.primaryOB : null))
+    : (c.bestBearOB || (c.primaryOB && !c.primaryOB.bull ? c.primaryOB : null));
+
+  let obPts = 0;
+  if (alignedOB && !alignedOB.invalidated && !alignedOB.mit) {
+    const dist = alignedOB.distPct;
+    if (alignedOB.status === 'IN_ZONE' || dist === 0) obPts = 20;
+    else if (alignedOB.status === 'RETESTED_HELD' && dist !== null && dist <= 0.5) obPts = 17;
+    else if (dist !== null && dist <= 0.5) obPts = 15;
+    else if (dist !== null && dist <= 1.5) obPts = 10;
+    else obPts = 5;
+  }
+
+  return Math.round((flowPts + momPts + obPts) * 10) / 10;
+}
+
+function compareOrderBlockCandidates(a, b, isBull, sort = 'SETUP_SCORE') {
+  const dir = isBull ? 1 : -1;
+  const absChgA = Math.abs(Number(a.chgPct || 0));
+  const absChgB = Math.abs(Number(b.chgPct || 0));
+  const flowA = Number(a.rupeeFlowCr || 0) * dir;
+  const flowB = Number(b.rupeeFlowCr || 0) * dir;
+
+  if (sort === 'SETUP_SCORE') {
+    return (
+      computeSetupScore(b, isBull) - computeSetupScore(a, isBull) ||
+      Number(b.agree || 0) - Number(a.agree || 0) ||
+      Number(b.strengthScore || 0) - Number(a.strengthScore || 0) ||
+      flowB - flowA ||
+      absChgB - absChgA
+    );
+  }
+
+  if (sort === 'FLOW_SCORE') {
+    return (
+      Number(b.agree || 0) - Number(a.agree || 0) ||
+      Number(b.strengthScore || 0) - Number(a.strengthScore || 0) ||
+      flowB - flowA ||
+      absChgB - absChgA
+    );
+  }
+
+  // MAX_GAINS — rank strictly by % move first, then strengthScore and directional flow
+  return (
+    absChgB - absChgA ||
+    Number(b.strengthScore || 0) - Number(a.strengthScore || 0) ||
+    flowB - flowA
+  );
+}
+
 class TredyeFlowService {
   constructor(options = {}) {
     loadDotEnv();
@@ -708,7 +768,7 @@ class TredyeFlowService {
     };
   }
 
-  async getOrderBlockFunnelSnapshot({ sector = 'ALL', side = 'ALL', sort = 'MAX_GAINS' } = {}) {
+  async getOrderBlockFunnelSnapshot({ sector = 'ALL', side = 'ALL', sort = 'SETUP_SCORE' } = {}) {
     const all = this.state.allRanked || [];
     const secStatsMap = new Map();
     for (const c of all) {
@@ -754,17 +814,8 @@ class TredyeFlowService {
       universeTotal: all.length,
     };
 
-    const scoreStock = (c, isBull) => {
-      const absChg = Math.abs(Number(c.chgPct || 0));
-      if (sort === 'FLOW_SCORE') {
-        return (Number(c.agree || 0) * 28) + (Math.abs(Number(c.rupeeFlowCr || 0)) * 2.5) + (absChg * 6);
-      }
-      // Default: MAX_GAINS (highest % gain for bulls, largest % drop for bears)
-      return absChg * 100 + Math.abs(Number(c.rupeeFlowCr || 0)) * 0.1;
-    };
-
-    rawBulls.sort((a, b) => scoreStock(b, true) - scoreStock(a, true));
-    rawBears.sort((a, b) => scoreStock(b, false) - scoreStock(a, false));
+    rawBulls.sort((a, b) => compareOrderBlockCandidates(a, b, true, sort));
+    rawBears.sort((a, b) => compareOrderBlockCandidates(a, b, false, sort));
 
     const maxContendersPerSide = normSector !== 'ALL' ? Math.min(20, Math.max(3, rawBulls.length)) : 20;
     const maxBearContenders = normSector !== 'ALL' ? Math.min(20, Math.max(3, rawBears.length)) : 20;
@@ -824,6 +875,8 @@ class TredyeFlowService {
         bu: c.buildup || (isBull ? 'LONG BUILD-UP' : 'SHORT BUILD-UP'),
         flowAgree: Number(c.agree || 0),
         flowCr: Number(c.rupeeFlowCr || 0),
+        strengthScore: Number(c.strengthScore || 0),
+        setupScore: computeSetupScore(c, isBull),
         obStr: Number((isBull ? (c.bestBullOB?.str || c.primaryOB?.str) : (c.bestBearOB?.str || c.primaryOB?.str)) || 1.5),
       };
 
@@ -1465,8 +1518,13 @@ class TredyeFlowService {
       else if (s.prev > 0) s.chg_pct = Number((((s.ltp - s.prev) / s.prev) * 100).toFixed(2));
       if (q.vwap > 0) s.vwap = q.vwap;
       if (q.buy_pct !== null && q.buy_pct !== undefined) s.buy_pct = q.buy_pct;
+      if (q.imb !== null && q.imb !== undefined) s.imb = q.imb;
       if (q.oi > 0) s.oi = q.oi;
-      if (q.depth) s.depth = q.depth;
+      if (q.depth) {
+        s.depth = q.tbq || q.tsq ? { ...q.depth, tbq: q.tbq, tsq: q.tsq } : q.depth;
+      } else if (q.tbq > 0 || q.tsq > 0) {
+        s.depth = { ...(s.depth || {}), tbq: q.tbq, tsq: q.tsq };
+      }
       if (q.volume > 0) s.volume = q.volume;
       if (q.lastTradeDate) s.quoteDate = q.lastTradeDate;
       updated++;
@@ -1663,4 +1721,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { TredyeFlowService, buildOrderBlockRealData };
+module.exports = { TredyeFlowService, buildOrderBlockRealData, compareOrderBlockCandidates, computeSetupScore };

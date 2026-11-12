@@ -74,7 +74,7 @@ function createDashboardServer(appController) {
     asyncHandler(async (req, res) => {
       const sector = String(req.query.sector || 'ALL');
       const side = String(req.query.side || 'ALL');
-      const sort = String(req.query.sort || 'MAX_GAINS');
+      const sort = String(req.query.sort || 'SETUP_SCORE');
       const snap = await appController.getOrderBlockFunnelSnapshot({ sector, side, sort });
       res.set('Cache-Control', 'no-store');
       res.json(snap);

@@ -30,6 +30,13 @@ function getDepthImbalance(stock) {
     }
     return ((stock.depth.tbq - stock.depth.tsq) / (stock.depth.tbq + stock.depth.tsq)) * 100;
   }
+  if (stock.depth && Array.isArray(stock.depth.buy) && Array.isArray(stock.depth.sell)) {
+    const tbq = stock.depth.buy.reduce((sum, lvl) => sum + Number(lvl?.quantity || 0), 0);
+    const tsq = stock.depth.sell.reduce((sum, lvl) => sum + Number(lvl?.quantity || 0), 0);
+    if (tbq + tsq > 0) {
+      return ((tbq - tsq) / (tbq + tsq)) * 100;
+    }
+  }
   return null;
 }
 
