@@ -78,21 +78,21 @@ Every stock is evaluated on up to 5 directional checks (`evaluateConfluence`):
 
 ### Step 2: Three Sort Modes in `/app/orderblock` (`src/index.js`)
 
-- **Setup Score (default)** — *"Which stocks are the best overall setups right now?"*
+- **Max Gains (default)** — *"Which stocks moved the most in `%` today?"*
+  - **How it ranks:** Purely by `|chgPct|` descending (uses `strengthScore` and directional flow only for exact ties).
+- **Setup Score** — *"Which stocks are the best overall setups right now?"*
   - **How it ranks:** Combines all three things you look at before taking a trade:
     1. **Order flow quality** (most weight — 60%)
     2. **Price momentum** (how strong today's move is — 20%)
     3. **Order Block proximity** (bonus points if price is inside or close to a valid Buy/Sell Order Block zone — 20%)
 - **Strongest Flow** — *"Which stocks have the cleanest institutional order flow?"*
   - **How it ranks:** Puts `5/5` confluence stocks first, then ranks by `strengthScore`, even if the `%` move is still small.
-- **Max Gains** — *"Which stocks moved the most in `%` today?"*
-  - **How it ranks:** Purely by `|chgPct|` descending (uses `strengthScore` and directional flow only for exact ties).
 
 | Sort Mode | Question It Answers | Ranking Order & Tie-Breakers | Ring Badge Value |
 | :--- | :--- | :--- | :--- |
-| **`Setup Score`** *(default, `SETUP_SCORE`)* | *"Which stocks have the best complete trade setups right now?"* | 1. `setupScore` (desc)<br>2. `agree` count (desc)<br>3. `strengthScore` (desc)<br>4. Directional `rupeeFlowCr` (desc)<br>5. `|chgPct|` (desc) | `setupScore` (`0–100`) |
+| **`Max Gains`** *(default, `MAX_GAINS`)* | *"Which stocks moved the most in `%` today?"* | 1. `|chgPct|` (desc)<br>2. `strengthScore` (desc)<br>3. Directional `rupeeFlowCr` (desc) | `strengthScore` (`0–100`) |
+| **`Setup Score`** (`SETUP_SCORE`) | *"Which stocks have the best complete trade setups right now?"* | 1. `setupScore` (desc)<br>2. `agree` count (desc)<br>3. `strengthScore` (desc)<br>4. Directional `rupeeFlowCr` (desc)<br>5. `|chgPct|` (desc) | `setupScore` (`0–100`) |
 | **`Strongest Flow`** (`FLOW_SCORE`) | *"Which stocks have the cleanest institutional order flow?"* | 1. `agree` count (desc)<br>2. `strengthScore` (desc)<br>3. Directional `rupeeFlowCr` (desc)<br>4. `|chgPct|` (desc) | `strengthScore` (`0–100`) |
-| **`Max Gains`** (`MAX_GAINS`) | *"Which stocks moved the most in `%` today?"* | 1. `|chgPct|` (desc)<br>2. `strengthScore` (desc)<br>3. Directional `rupeeFlowCr` (desc) | `strengthScore` (`0–100`) |
 
 > **Alert Desk (`/`):** The main Alert Desk ranks `topBull` and `topBear` using the same rule as **`Strongest Flow`**: `agree` desc -> `strengthScore` desc -> directional `%` change desc.
 

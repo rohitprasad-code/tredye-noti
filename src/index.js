@@ -312,7 +312,7 @@ function computeSetupScore(c, isBull) {
   return Math.round((flowPts + momPts + obPts) * 10) / 10;
 }
 
-function compareOrderBlockCandidates(a, b, isBull, sort = 'SETUP_SCORE') {
+function compareOrderBlockCandidates(a, b, isBull, sort = 'MAX_GAINS') {
   const dir = isBull ? 1 : -1;
   const absChgA = Math.abs(Number(a.chgPct || 0));
   const absChgB = Math.abs(Number(b.chgPct || 0));
@@ -390,86 +390,6 @@ class TredyeFlowService {
     this.upstoxTickTimer = null;
     this.pendingUpstoxTicks = {};
     this.seedStarterTrackerIfEmpty();
-    this.seedStarterJournalIfEmpty();
-  }
-
-  seedStarterJournalIfEmpty() {
-    try {
-      const existing = this.store.listJournalEntries();
-      const alreadySeeded = this.store.db
-        .prepare(`SELECT value FROM settings WHERE key = 'journal_seeded'`)
-        .get();
-      if (existing.length === 0 && !alreadySeeded) {
-        const now = Date.now();
-        this.store.createJournalEntry({
-          symbol: 'UNIONBANK',
-          side: 'LONG',
-          status: 'OPEN',
-          qty: 400,
-          entryPrice: 121.8,
-          stopPrice: 118.5,
-          targetPrice: 132.0,
-          obZone: 'Bullish OB ₹121.20–₹122.40',
-          setupType: '5/5 Bull Flow + Untested Demand OB',
-          thesis: 'Strongest PSU Bank inflow (+5/5 signals, Long Buildup) bouncing off 3m Demand OB.',
-          lessons: 'Hold while price stays above VWAP & Demand OB ₹121.20.',
-          rating: 5,
-          entryAt: now - 3 * 3600 * 1000,
-        });
-        this.store.createJournalEntry({
-          symbol: 'TATASTEEL',
-          side: 'LONG',
-          status: 'OPEN',
-          qty: 550,
-          entryPrice: 181.3,
-          stopPrice: 179.4,
-          targetPrice: 187.5,
-          obZone: 'Bullish OB ₹181.18–₹181.45',
-          setupType: 'Order Block Pullback',
-          thesis: 'Metals sector inflow leader; entered inside 3m Bullish OB with CVD rising.',
-          lessons: 'Trail stop to ₹181.10 once R1 is tested.',
-          rating: 5,
-          entryAt: now - 5 * 3600 * 1000,
-        });
-        this.store.createJournalEntry({
-          symbol: 'RELIANCE',
-          side: 'LONG',
-          status: 'OPEN',
-          qty: 50,
-          entryPrice: 1412.0,
-          stopPrice: 1392.0,
-          targetPrice: 1465.0,
-          obZone: 'Demand Zone ₹1,405–₹1,414',
-          setupType: 'Core Swing + Flow Confirmation',
-          thesis: 'Accumulated near institutional POC support with steady buy-side absorption.',
-          lessons: 'Step back only if 3m Bearish OB forms with 4/5 BEAR flow.',
-          rating: 4,
-          entryAt: now - 28 * 3600 * 1000,
-        });
-        this.store.createJournalEntry({
-          symbol: 'PERSISTENT',
-          side: 'LONG',
-          status: 'CLOSED',
-          qty: 20,
-          entryPrice: 5940.0,
-          exitPrice: 6110.0,
-          stopPrice: 5880.0,
-          targetPrice: 6115.0,
-          obZone: 'Exited at Bearish Supply OB ₹6,106.50–₹6,114.50',
-          setupType: 'OB-to-OB Swing',
-          thesis: 'Bought at Demand OB and stepped back right when Tredye flagged Bearish Supply OB ₹6,106–6,114.',
-          lessons: 'Stepping back at the opposing Supply OB locked in +₹3,400 before the IT pullback.',
-          rating: 5,
-          entryAt: now - 48 * 3600 * 1000,
-          closedAt: now - 4 * 3600 * 1000,
-        });
-        this.store.db
-          .prepare(`INSERT OR REPLACE INTO settings (key, value) VALUES ('journal_seeded', '1')`)
-          .run();
-      }
-    } catch {
-      // ignore
-    }
   }
 
   seedStarterTrackerIfEmpty() {
@@ -567,180 +487,8 @@ class TredyeFlowService {
     };
   }
 
-  computeJournalState() {
-    const rawEntries = this.store.listJournalEntries();
-    let totalInvestedOpen = 0;
-    let currentPortfolioValue = 0;
-    let openPnlRs = 0;
-    let realizedPnlRs = 0;
-    let closedWins = 0;
-    let closedTotal = 0;
-    const sectorMap = new Map();
-
-    const entries = rawEntries.map(e => {
-      const card = this.state.allRanked.find(c => c.symbol === e.symbol) || null;
-      const stock = this.state.stocksBySymbol.get(e.symbol) || null;
-      const ltp = card?.ltp ?? stock?.ltp ?? e.exitPrice ?? e.entryPrice;
-      const chgPct = card?.chgPct ?? stock?.chg_pct ?? 0;
-      const sector = card?.sector ?? stock?.sector ?? 'Other';
-      const flowSide = card?.side || 'FLAT';
-      const agree = card?.agree ?? 0;
-      const totalChecks = card?.totalChecks ?? 5;
-      const buildup = card?.buildup || 'NEUTRAL';
-      const bullOB = card?.bestBullOB || (card?.primaryOB?.bull ? card.primaryOB : null);
-      const bearOB = card?.bestBearOB || (card?.primaryOB && !card.primaryOB.bull ? card.primaryOB : null);
-
-      const isLong = e.side !== 'SHORT';
-      const dir = isLong ? 1 : -1;
-      const activePrice = e.status === 'CLOSED' && e.exitPrice != null ? e.exitPrice : ltp;
-      const investedCapital = Number((e.qty * e.entryPrice).toFixed(2));
-      const currentValue = Number((e.qty * activePrice).toFixed(2));
-      const pnlPerShare = (activePrice - e.entryPrice) * dir;
-      const pnlRs = Number((pnlPerShare * e.qty).toFixed(2));
-      const pnlPct = e.entryPrice > 0 ? Number(((pnlPerShare / e.entryPrice) * 100).toFixed(2)) : 0;
-
-      let rMultiple = null;
-      if (e.stopPrice && Math.abs(e.entryPrice - e.stopPrice) > 0.001) {
-        const riskPerShare = Math.abs(e.entryPrice - e.stopPrice);
-        rMultiple = Number((pnlPerShare / riskPerShare).toFixed(2));
-      }
-
-      // Live Tredye Order-Flow & Order-Block Health Verdict on this investment
-      let healthCode = 'HOLD_STEADY';
-      let healthLabel = '🟢 FLOW INTACT — HOLD';
-      let healthTone = 'up';
-      let healthReason = `Live flow ${agree}/${totalChecks} ${flowSide} (${buildup})`;
-
-      if (e.status === 'CLOSED') {
-        healthCode = 'BOOKED';
-        healthLabel = pnlRs >= 0 ? '✅ BOOKED PROFIT' : '📕 CLOSED TRADE';
-        healthTone = pnlRs >= 0 ? 'up' : 'dn';
-        healthReason = `Closed at ₹${activePrice} (${pnlPct >= 0 ? '+' : ''}${pnlPct}%)`;
-      } else if (isLong) {
-        if (e.stopPrice && ltp <= e.stopPrice) {
-          healthCode = 'STOP_ALERT';
-          healthLabel = '🚨 BELOW STOP FLOOR — STEP BACK';
-          healthTone = 'dn';
-          healthReason = `LTP ₹${ltp} broke your stop ₹${e.stopPrice}`;
-        } else if (e.targetPrice && ltp >= e.targetPrice) {
-          healthCode = 'TARGET_HIT';
-          healthLabel = '🎯 TARGET REACHED — BOOK / TRAIL';
-          healthTone = 'gold';
-          healthReason = `LTP ₹${ltp} reached target ₹${e.targetPrice}`;
-        } else if (flowSide === 'BEAR' && agree >= 4) {
-          healthCode = 'STEP_BACK_WARNING';
-          healthLabel = '⚠️ BEAR FLOW FLIP — WATCH CLOSELY';
-          healthTone = 'warn';
-          healthReason = `Tredye flow flipped ${agree}/${totalChecks} BEAR (${buildup})${bearOB ? ` · Supply OB ₹${bearOB.bot}–${bearOB.top}` : ''}`;
-        } else if (bullOB && bullOB.distPct <= 0.35) {
-          healthCode = 'AT_SUPPORT_OB';
-          healthLabel = '🧱 IN DEMAND OB SUPPORT';
-          healthTone = 'up';
-          healthReason = `Testing Bullish Demand OB ₹${bullOB.bot}–₹${bullOB.top} with ${agree}/${totalChecks} ${flowSide}`;
-        }
-      } else {
-        // SHORT position
-        if (e.stopPrice && ltp >= e.stopPrice) {
-          healthCode = 'STOP_ALERT';
-          healthLabel = '🚨 ABOVE STOP — COVER WARNING';
-          healthTone = 'dn';
-          healthReason = `LTP ₹${ltp} crossed stop ₹${e.stopPrice}`;
-        } else if (flowSide === 'BULL' && agree >= 4) {
-          healthCode = 'STEP_BACK_WARNING';
-          healthLabel = '⚠️ BULL FLOW FLIP — COVER CAUTION';
-          healthTone = 'warn';
-          healthReason = `Flow flipped ${agree}/${totalChecks} BULL (${buildup})`;
-        }
-      }
-
-      if (e.status === 'OPEN') {
-        totalInvestedOpen += investedCapital;
-        currentPortfolioValue += currentValue;
-        openPnlRs += pnlRs;
-        sectorMap.set(sector, (sectorMap.get(sector) || 0) + currentValue);
-      } else if (e.status === 'CLOSED') {
-        realizedPnlRs += pnlRs;
-        closedTotal += 1;
-        if (pnlRs > 0) closedWins += 1;
-      }
-
-      const buyPct = Math.round(card?.buyPct ?? (stock ? (stock.bV / Math.max(1, stock.vol)) * 100 : 50));
-      const refPrice = e.status === 'CLOSED' && e.exitPrice ? e.exitPrice : ltp;
-
-      return {
-        ...e,
-        name: card?.name || stock?.name || e.symbol,
-        sector,
-        ltp,
-        liveLtp: ltp,
-        refPrice,
-        chgPct,
-        liveChgPct: chgPct,
-        flowSide,
-        liveSide: flowSide,
-        agree,
-        liveAgree: agree,
-        totalChecks,
-        liveTotalChecks: totalChecks,
-        liveBuyPct: buyPct,
-        liveStrength: card?.strengthScore || 50,
-        buildup,
-        investedCapital,
-        currentValue,
-        pnlRs,
-        pnlPct,
-        rMultiple,
-        bullOB: bullOB ? { bot: bullOB.bot, top: bullOB.top, status: bullOB.status, distPct: bullOB.distPct } : null,
-        bearOB: bearOB ? { bot: bearOB.bot, top: bearOB.top, status: bearOB.status, distPct: bearOB.distPct } : null,
-        healthCode,
-        healthLabel,
-        healthTone,
-        healthReason,
-      };
-    });
-
-    const openPnlPct = totalInvestedOpen > 0 ? Number(((openPnlRs / totalInvestedOpen) * 100).toFixed(2)) : 0;
-    const winRatePct = closedTotal > 0 ? Math.round((closedWins / closedTotal) * 100) : 100;
-    const atRiskCount = entries.filter(
-      x => x.status === 'OPEN' && (x.healthTone === 'warn' || x.healthTone === 'danger')
-    ).length;
-    const sectorAllocation = [...sectorMap.entries()]
-      .map(([sector, value]) => {
-        const cap = Number(value.toFixed(2));
-        const pct = currentPortfolioValue > 0 ? Number(((value / currentPortfolioValue) * 100).toFixed(1)) : 0;
-        return {
-          sector,
-          value: cap,
-          capital: cap,
-          pct,
-          sharePct: pct,
-        };
-      })
-      .sort((a, b) => b.value - a.value);
-
-    return {
-      entries,
-      enriched: entries,
-      summary: {
-        totalInvestedOpen: Number(totalInvestedOpen.toFixed(2)),
-        currentPortfolioValue: Number(currentPortfolioValue.toFixed(2)),
-        totalCurrentOpen: Number(currentPortfolioValue.toFixed(2)),
-        openPnlRs: Number(openPnlRs.toFixed(2)),
-        openPnlPct,
-        realizedPnlRs: Number(realizedPnlRs.toFixed(2)),
-        closedPnlRs: Number(realizedPnlRs.toFixed(2)),
-        winRatePct,
-        openCount: entries.filter(x => x.status === 'OPEN').length,
-        closedCount: closedTotal,
-        atRiskCount,
-        sectorAllocation,
-      },
-    };
-  }
-
   getPublicState() {
     const market = getMarketStatus();
-    const journalData = this.computeJournalState();
     return {
       sourceMode: this.state.sourceMode,
       authStatus: this.state.authStatus,
@@ -759,8 +507,6 @@ class TredyeFlowService {
       universe: this.state.allRanked,
       sectors: this.state.sectors,
       tracker: this.state.tracker,
-      journal: journalData.entries,
-      journalSummary: journalData.summary,
       alerts: this.store.listAlerts(50, true),
       reminders: this.store.listPendingReminders(),
       snoozes: this.store.listActiveSnoozes(),
@@ -768,7 +514,7 @@ class TredyeFlowService {
     };
   }
 
-  async getOrderBlockFunnelSnapshot({ sector = 'ALL', side = 'ALL', sort = 'SETUP_SCORE' } = {}) {
+  async getOrderBlockFunnelSnapshot({ sector = 'ALL', side = 'ALL', sort = 'MAX_GAINS' } = {}) {
     const all = this.state.allRanked || [];
     const secStatsMap = new Map();
     for (const c of all) {
@@ -1355,76 +1101,6 @@ class TredyeFlowService {
     this.store.removeTrackerItem(sym);
     this.recomputeTrackerState({ emitAlerts: false });
     this.broadcast('state', this.getPublicState());
-  }
-
-  getJournalState() {
-    const { enriched, summary } = this.computeJournalState();
-    return { journal: enriched, journalSummary: summary };
-  }
-
-  async createJournalItem(payload) {
-    const sym = String(payload.symbol || '').trim().toUpperCase();
-    if (!sym) throw new Error('symbol is required');
-
-    await this.getStockDetail(sym).catch(() => {});
-    const stock = this.state.stocksBySymbol.get(sym);
-    const obInfo = this.state.obBySymbol.get(sym);
-    const side = (payload.side || 'BUY').toUpperCase();
-    const defaultOb = side === 'SELL' ? obInfo?.bestBearOB : obInfo?.bestBullOB;
-    const defaultZone =
-      defaultOb
-        ? `${defaultOb.type === 'bear' ? 'Bear' : 'Bull'} OB ₹${defaultOb.bot}–₹${defaultOb.top} (${defaultOb.str}x)`
-        : '';
-
-    const created = this.store.createJournalEntry({
-      ...payload,
-      symbol: sym,
-      sector: payload.sector || stock?.sector || '',
-      obZone: payload.obZone || defaultZone,
-      entryPrice: payload.entryPrice !== undefined && payload.entryPrice !== '' ? payload.entryPrice : stock?.ltp,
-    });
-
-    if (payload.syncToTracker && (created.status || 'OPEN') === 'OPEN') {
-      await this.upsertTrackerPosition({
-        symbol: sym,
-        mode: 'SELL_WATCH',
-        entryPrice: created.entryPrice,
-        stopPrice: created.stopPrice,
-        targetPrice: created.targetPrice,
-        qty: created.qty,
-        notes: created.thesis || created.setupType || 'Synced from Journal Booklet',
-      }).catch(() => {});
-    }
-
-    this.broadcast('state', this.getPublicState());
-    const { enriched, summary } = this.computeJournalState();
-    return {
-      item: enriched.find(e => e.id === created.id) || created,
-      journal: enriched,
-      journalSummary: summary,
-    };
-  }
-
-  async updateJournalItem(id, patch) {
-    const updated = this.store.updateJournalEntry(id, patch);
-    if (!updated) throw new Error(`Journal entry #${id} not found`);
-    this.broadcast('state', this.getPublicState());
-    const { enriched, summary } = this.computeJournalState();
-    return {
-      item: enriched.find(e => e.id === Number(id)) || updated,
-      journal: enriched,
-      journalSummary: summary,
-    };
-  }
-
-  deleteJournalItem(id) {
-    this.store.deleteJournalEntry(id);
-    this.broadcast('state', this.getPublicState());
-    const { enriched, summary } = this.computeJournalState();
-    return {
-      journal: enriched,
-      journalSummary: summary,
-    };
   }
 
   updateConfig(partial) {

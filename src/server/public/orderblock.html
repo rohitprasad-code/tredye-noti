@@ -3,6 +3,7 @@
 <head><meta name="ob-build" content="ob-EGUVrGbAvoIk_NELzbmfitmkMCKAaVhfWwDNfNMzOesmgy8IKbx2BNpButY">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
 <title>Order Block</title>
 <link rel="stylesheet" href="/vendor/fonts/barlow-condensed/latin-600.css">
 <link rel="stylesheet" href="/vendor/fonts/barlow-condensed/latin-700.css">
@@ -1466,26 +1467,31 @@ body.stacked .ob-top-bar { display: none; }
 
 
 /* ================= LEFT VERTICAL SIDEBAR RAIL (#obSideRail) ================= */
+.ob-side-rail,
+.ob-side-rail * {
+  box-sizing: border-box;
+}
 .ob-side-rail {
   position: fixed;
   top: 0;
   left: 0;
   bottom: 0;
-  width: 50px;
+  width: 54px;
   background: rgba(5, 8, 13, 0.98);
   border-right: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   align-items: stretch;
-  padding: 8px 7px 12px;
+  padding: 8px 8px 12px;
   z-index: 120;
   transition: width 0.22s cubic-bezier(0.22, 1, 0.36, 1);
   font-family: var(--f-ui, "Inter Tight", -apple-system, sans-serif);
   user-select: none;
 }
 body.rail-expanded .ob-side-rail {
-  width: 190px;
+  width: max-content;
+  min-width: 190px;
 }
 body.stacked .ob-side-rail {
   display: none;
@@ -1499,15 +1505,22 @@ body.stacked .ob-side-rail {
 .ob-side-rail .rail-logo {
   display: flex;
   align-items: center;
-  gap: 10px;
+  justify-content: center;
+  gap: 0;
   height: 30px;
-  padding: 0 7px;
+  padding: 0;
   text-decoration: none;
   color: #EEF3FA;
+}
+body.rail-expanded .ob-side-rail .rail-logo {
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 0 8px;
 }
 .ob-side-rail .logo-bars {
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 3px;
   width: 18px;
   flex: none;
@@ -1528,11 +1541,11 @@ body.stacked .ob-side-rail {
 }
 .ob-side-rail .rail-collapse {
   width: 100%;
-  height: 26px;
-  border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  background: rgba(255, 255, 255, 0.03);
-  color: #8C9CB2;
+  height: 36px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: #CBD5E1;
   font-size: 13px;
   line-height: 1;
   cursor: pointer;
@@ -1543,8 +1556,8 @@ body.stacked .ob-side-rail {
 }
 .ob-side-rail .rail-collapse:hover {
   color: #EEF3FA;
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(255, 255, 255, 0.2);
 }
 .ob-side-rail .rail-divider {
   height: 1px;
@@ -1555,31 +1568,49 @@ body.stacked .ob-side-rail {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 10px;
-  height: 34px;
-  padding: 0 9px;
+  justify-content: center;
+  gap: 0;
+  width: 100%;
+  height: 36px;
+  padding: 0;
   border-radius: 8px;
-  border: 1px solid transparent;
-  color: #8C9CB2;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: rgba(255, 255, 255, 0.04);
+  color: #CBD5E1;
   text-decoration: none;
   font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
   transition: all 0.16s ease;
 }
+body.rail-expanded .ob-side-rail .rail-item {
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 0 10px;
+}
 .ob-side-rail .rail-ic {
   width: 18px;
-  text-align: center;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-size: 14px;
   flex: none;
 }
+.ob-side-rail .rail-ic svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
 .ob-side-rail .rail-lbl {
+  display: none;
   opacity: 0;
   pointer-events: none;
   overflow: hidden;
   transition: opacity 0.15s ease;
 }
 body.rail-expanded .ob-side-rail .rail-lbl {
+  display: inline-block;
   opacity: 1;
   pointer-events: auto;
 }
@@ -1626,13 +1657,19 @@ body:not(.rail-expanded) .ob-side-rail .rail-item[data-tip]:hover::after {
 .ob-side-rail .rail-live {
   display: flex;
   align-items: center;
-  gap: 10px;
+  justify-content: center;
+  gap: 0;
   height: 28px;
-  padding: 0 12px;
+  padding: 0;
   font-family: var(--f-num, "JetBrains Mono", monospace);
   font-size: 10px;
   font-weight: 700;
   color: #7CFFC4;
+}
+body.rail-expanded .ob-side-rail .rail-live {
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 0 10px;
 }
 .ob-side-rail .rail-live-dot {
   width: 8px;
@@ -1649,10 +1686,11 @@ body:not(.rail-expanded) .ob-side-rail .rail-item[data-tip]:hover::after {
   align-items: center;
   gap: 2px;
   padding: 3px;
-  border-radius: 999px;
+  border-radius: 8px;
   background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  align-self: center;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  width: 100%;
+  align-self: stretch;
 }
 body.rail-expanded .ob-side-rail .rail-theme-pill {
   flex-direction: row;
@@ -1660,13 +1698,13 @@ body.rail-expanded .ob-side-rail .rail-theme-pill {
   justify-content: space-around;
 }
 .ob-side-rail .rt-btn {
-  width: 26px;
-  height: 24px;
-  border-radius: 999px;
+  width: 100%;
+  height: 28px;
+  border-radius: 6px;
   border: 0;
   background: transparent;
-  color: #7A8CA3;
-  font-size: 12px;
+  color: #8C9CB2;
+  font-size: 13px;
   cursor: pointer;
   display: grid;
   place-items: center;
@@ -1681,7 +1719,18 @@ body.rail-expanded .ob-side-rail .rail-theme-pill {
   background: rgba(248, 250, 252, 0.96);
   border-right-color: #DCE2EB;
 }
-:root[data-theme=light] .ob-side-rail .rail-item { color: #475569; }
+:root[data-theme=light] .ob-side-rail .rail-collapse,
+:root[data-theme=light] .ob-side-rail .rail-item {
+  color: #334155;
+  background: #FFFFFF;
+  border-color: #CBD5E1;
+}
+:root[data-theme=light] .ob-side-rail .rail-item:hover,
+:root[data-theme=light] .ob-side-rail .rail-collapse:hover {
+  color: #0B1220;
+  background: #F1F5F9;
+  border-color: #94A3B8;
+}
 :root[data-theme=light] .ob-side-rail .rail-item.active {
   color: #0E9F63;
   background: rgba(14, 159, 99, 0.1);
@@ -1698,11 +1747,16 @@ body.rail-expanded .ob-side-rail .rail-theme-pill {
 }
 /* Shift Top Bar smoothly next to Left Rail */
 .ob-top-bar {
-  left: 50px !important;
+  left: var(--rail-w, 54px) !important;
   transition: left 0.22s cubic-bezier(0.22, 1, 0.36, 1);
 }
 body.rail-expanded .ob-top-bar {
-  left: 190px !important;
+  left: var(--rail-w, 190px) !important;
+}
+@media (prefers-reduced-motion: no-preference) {
+  @view-transition {
+    navigation: auto;
+  }
 }
 
 </style>
@@ -2155,21 +2209,9 @@ body.rail-expanded .ob-top-bar {
     </a>
     <button type="button" class="rail-collapse" id="obRailToggle" title="Expand / Collapse sidebar" aria-label="Toggle sidebar">»</button>
     <div class="rail-divider"></div>
-    <a href="/" class="rail-item" title="Alert Desk &amp; Tracker (/)" data-tip="Alert Desk">
-      <span class="rail-ic">⌂</span>
-      <span class="rail-lbl">Alert Desk</span>
-    </a>
     <a href="/app/orderblock" class="rail-item active" title="Order Block Terminal (/app/orderblock)" data-tip="Order Block">
       <span class="rail-ic">⟁</span>
       <span class="rail-lbl">Order Block</span>
-    </a>
-    <a href="/app/journal" class="rail-item journey" title="My Journey &amp; Investment Booklet (/app/journal)" data-tip="My Journey">
-      <span class="rail-ic">📖</span>
-      <span class="rail-lbl">My Journey</span>
-    </a>
-    <a href="/app/journal?action=new" class="rail-item" title="Log New Investment in My Journey" data-tip="Log Trade">
-      <span class="rail-ic">➕</span>
-      <span class="rail-lbl">Log Trade</span>
     </a>
   </div>
   <div class="rail-bottom">
@@ -2181,6 +2223,15 @@ body.rail-expanded .ob-top-bar {
       <button type="button" class="rt-btn" data-theme-set="light" title="Light theme" aria-label="Light theme">☀</button>
       <button type="button" class="rt-btn on" data-theme-set="dark" title="Dark theme" aria-label="Dark theme">☾</button>
     </div>
+    <a href="/app/settings" class="rail-item" id="obSettingsBtn" title="Settings · Upstox API &amp; Flow Rules (/app/settings)" data-tip="Settings">
+      <span class="rail-ic" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"></circle>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.6.77 1 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+        </svg>
+      </span>
+      <span class="rail-lbl">Settings</span>
+    </a>
   </div>
 </aside>
 
@@ -2206,9 +2257,9 @@ body.rail-expanded .ob-top-bar {
     <div class="obc-group">
       <span class="obc-lbl">SORT</span>
       <select id="obSortSel" aria-label="Sort order">
+        <option value="MAX_GAINS">Max Gains (Bulls &amp; Bears)</option>
         <option value="SETUP_SCORE">Setup Score (Flow + OB)</option>
         <option value="FLOW_SCORE">Strongest Flow</option>
-        <option value="MAX_GAINS">Max Gains (Bulls &amp; Bears)</option>
       </select>
     </div>
     <div class="ob-live-status">
@@ -2249,7 +2300,7 @@ body.rail-expanded .ob-top-bar {
     data: null,
     etag: "",
     onUpdate: null,
-    filter: { sector: "ALL", side: "ALL", sort: "SETUP_SCORE" }
+    filter: { sector: "ALL", side: "ALL", sort: "MAX_GAINS" }
   };
   var LG = window.OBF_LOGOS = { v: "", m: {} };
   var PEEK = window.OB_PEEK = /[?&]peek=1(?:&|$)/.test(location.search);
@@ -2724,7 +2775,7 @@ function buildModel(D) {
   M.nBull = bulls.length; M.nBear = bears.filter(s => !s.event).length; // 59 / 149 (+1 event)
   M.bulls = bulls; M.bears = bears;
   M.nBullAll = bulls.length; M.nBearAll = bears.length; // 59 / 150
-  const sortMode = (D.meta && D.meta.filter && D.meta.filter.sort) || (window.OBF_FEED && window.OBF_FEED.filter && window.OBF_FEED.filter.sort) || "SETUP_SCORE";
+  const sortMode = (D.meta && D.meta.filter && D.meta.filter.sort) || (window.OBF_FEED && window.OBF_FEED.filter && window.OBF_FEED.filter.sort) || "MAX_GAINS";
   stocks.forEach(s => {
     s.sel = !!s.top;
     const realScore = sortMode === "SETUP_SCORE"
@@ -7558,7 +7609,7 @@ if (!OB_PEEK) {
   window.addEventListener('keydown', e => {
     if (!M || e.defaultPrevented || e.isComposing) return;
     if (FIND.open && e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); obFindClose(); FIND.inp.blur(); return; }
-    const t = e.target; if (t && t.closest && t.closest('input,textarea,select,[contenteditable]')) return;
+    const t = e.target; if (t && t.closest && t.closest('input,textarea,select,[contenteditable],dialog')) return;
     const k = (e.key || '').toLowerCase(), mod = (e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey;
     if ((mod && (k === 'k' || k === 'f')) || (k === '/' && !e.metaKey && !e.ctrlKey && !e.altKey)) { e.preventDefault(); e.stopPropagation(); obFindOpen(); }
   }, true);
@@ -7572,12 +7623,19 @@ function obControlsMount() {
   const rail = document.getElementById("obSideRail");
   if (rail && !rail._mounted) {
     rail._mounted = true;
+    const syncRailW = () => {
+      document.documentElement.style.setProperty("--rail-w", rail.offsetWidth + "px");
+    };
+    syncRailW();
     const toggleBtn = document.getElementById("obRailToggle");
     if (toggleBtn) {
       toggleBtn.addEventListener("click", () => {
         const exp = document.body.classList.toggle("rail-expanded");
         toggleBtn.textContent = exp ? "«" : "»";
-        if (typeof rerender === "function") rerender(true);
+        requestAnimationFrame(() => {
+          syncRailW();
+          if (typeof rerender === "function") rerender(true);
+        });
       });
     }
     const themeBtns = [...rail.querySelectorAll(".rt-btn")];
@@ -7687,7 +7745,7 @@ function computeScale() {
   S.reduced = false;
   if (!S.stacked) {
     const railEl = document.getElementById('obSideRail');
-    const LEFT_RAIL_W = railEl ? (document.body.classList.contains('rail-expanded') ? 190 : 50) : 0;
+    const LEFT_RAIL_W = railEl ? (railEl.offsetWidth || (document.body.classList.contains('rail-expanded') ? 190 : 54)) : 0;
     const TOP_BAR_H = 36;
     const availH = Math.max(400, H - TOP_BAR_H);
     const availW = Math.max(600, W - LEFT_RAIL_W);

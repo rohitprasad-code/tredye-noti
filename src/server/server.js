@@ -74,7 +74,7 @@ function createDashboardServer(appController) {
     asyncHandler(async (req, res) => {
       const sector = String(req.query.sector || 'ALL');
       const side = String(req.query.side || 'ALL');
-      const sort = String(req.query.sort || 'SETUP_SCORE');
+      const sort = String(req.query.sort || 'MAX_GAINS');
       const snap = await appController.getOrderBlockFunnelSnapshot({ sector, side, sort });
       res.set('Cache-Control', 'no-store');
       res.json(snap);
@@ -216,7 +216,7 @@ function createDashboardServer(appController) {
             `<!doctype html><body style="background:#04060A;color:#EEF3FA;font-family:sans-serif;padding:40px">` +
               `<h2 style="color:#FF3B5C">Upstox Authorization Failed</h2>` +
               `<p>${String(errorDesc || error)}</p>` +
-              `<a href="/" style="color:#19E58C">Return to Alert Desk</a></body>`
+              `<a href="/" style="color:#19E58C">Return to Terminal</a></body>`
           );
       }
       if (!code) {
@@ -230,7 +230,6 @@ function createDashboardServer(appController) {
           `<p>Live quotes &amp; WebSocket V3 feed are now active on your local terminal.</p>` +
           `<div style="margin-top:20px;display:flex;gap:12px">` +
             `<a href="/app/orderblock" style="padding:10px 16px;background:#19E58C;color:#04060A;font-weight:700;border-radius:8px;text-decoration:none">Open Order Block Terminal</a>` +
-            `<a href="/" style="padding:10px 16px;border:1px solid #1A2433;color:#EEF3FA;border-radius:8px;text-decoration:none">Alert Desk</a>` +
           `</div>` +
           `<script>setTimeout(function(){ window.location.href = '/app/orderblock'; }, 1600);</script>` +
         `</body>`
@@ -279,61 +278,19 @@ function createDashboardServer(appController) {
     res.json({ ok: true, tracker: appController.state.tracker });
   });
 
-  // Investment & Trade Journal Booklet CRUD endpoints (/api/journal)
-  app.get('/api/journal', (_req, res) => {
-    res.set('Cache-Control', 'no-store');
-    const jState = appController.getJournalState();
-    res.json({ ok: true, ...jState });
-  });
-
-  app.post(
-    '/api/journal',
-    asyncHandler(async (req, res) => {
-      const body = req.body || {};
-      if (!body.symbol) {
-        return res.status(400).json({ error: 'symbol is required' });
-      }
-      const resJ = await appController.createJournalItem(body);
-      res.json({ ok: true, ...resJ });
-    })
-  );
-
-  app.all(
-    '/api/journal/:id',
-    asyncHandler(async (req, res, next) => {
-      const id = Number(req.params.id);
-      if (!Number.isFinite(id)) return next();
-      if (req.method === 'PUT' || req.method === 'POST') {
-        const resJ = await appController.updateJournalItem(id, req.body || {});
-        return res.json({ ok: true, ...resJ });
-      }
-      if (req.method === 'DELETE') {
-        const resJ = appController.deleteJournalItem(id);
-        return res.json({ ok: true, ...resJ });
-      }
-      return next();
-    })
-  );
-
   // Local npm-installed vendor assets (immutable aggressive caching)
   const vendorCacheOpts = { maxAge: '365d', immutable: true };
   app.use('/vendor/fonts', express.static(path.join(NODE_MODULES_DIR, '@fontsource'), vendorCacheOpts));
   app.get('/vendor/gsap.min.js', (_req, res) => {
     res.sendFile(path.join(NODE_MODULES_DIR, 'gsap/dist/gsap.min.js'), vendorCacheOpts);
   });
-  app.get('/vendor/lucide.min.js', (_req, res) => {
-    res.sendFile(path.join(NODE_MODULES_DIR, 'lucide/dist/umd/lucide.min.js'), vendorCacheOpts);
-  });
 
-  // Clean SPA routes (/app/orderblock, /app/journal, /journal) — note /orderblock intentionally excluded
-  app.get(['/', '/app'], (_req, res) => {
-    res.sendFile(path.join(PUBLIC_DIR, 'index.html'));
-  });
-  app.get('/app/orderblock', (_req, res) => {
+  // Order Block Terminal & dedicated Settings page
+  app.get(['/', '/app', '/app/orderblock'], (_req, res) => {
     res.sendFile(path.join(PUBLIC_DIR, 'orderblock.html'));
   });
-  app.get(['/journal', '/app/journal'], (_req, res) => {
-    res.sendFile(path.join(PUBLIC_DIR, 'journal.html'));
+  app.get(['/settings', '/app/settings'], (_req, res) => {
+    res.sendFile(path.join(PUBLIC_DIR, 'settings.html'));
   });
 
   // Static assets from src/server/public

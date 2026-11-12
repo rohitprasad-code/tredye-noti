@@ -12,11 +12,8 @@
 
   function applyTheme(theme) {
     const t = theme === 'light' ? 'light' : 'dark';
-    if (t === 'light') {
-      document.documentElement.setAttribute('data-theme', 'light');
-    } else {
-      document.documentElement.setAttribute('data-theme', 'dark');
-    }
+    document.documentElement.setAttribute('data-theme', t);
+    document.documentElement.style.colorScheme = t;
     document.querySelectorAll('#obSideRail .rt-btn').forEach(function (btn) {
       btn.classList.toggle('on', btn.getAttribute('data-theme-set') === t);
     });
@@ -35,23 +32,16 @@
     if (!document.body || !document.body.classList.contains('has-ob-rail')) return;
     if (document.getElementById('obSideRail')) return;
 
-    const expanded = (function () {
-      try {
-        return localStorage.getItem('ob_rail_expanded') === '1';
-      } catch (_e) {
-        return false;
-      }
-    })();
-    if (expanded) {
-      document.body.classList.add('rail-expanded');
+    // Never auto-expand on navigation; only toggle when #obRailToggle is clicked
+    try {
+      localStorage.removeItem('ob_rail_expanded');
+    } catch (_e) {
+      // Ignore storage errors
     }
 
     const path = (location.pathname.replace(/\/+$/, '') || '/').toLowerCase();
-    const params = new URLSearchParams(location.search || '');
-    const isAlerts = path === '/' || path === '/app';
-    const isOrderBlock = path === '/app/orderblock';
-    const isJournal = path === '/app/journal' || path === '/journal';
-    const isNewTrade = isJournal && params.get('action') === 'new';
+    const isOrderBlock = path === '/' || path === '/app' || path === '/app/orderblock';
+    const isSettings = path === '/settings' || path === '/app/settings';
 
     const curTheme =
       document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
@@ -70,25 +60,11 @@
           '</span>' +
           '<span class="rail-lbl rail-brand-lbl">Terminal</span>' +
         '</a>' +
-        '<button type="button" class="rail-collapse" id="obRailToggle" title="Expand / Collapse sidebar" aria-label="Toggle sidebar">' +
-          (expanded ? '«' : '»') +
-        '</button>' +
+        '<button type="button" class="rail-collapse" id="obRailToggle" title="Expand / Collapse sidebar" aria-label="Toggle sidebar">»</button>' +
         '<div class="rail-divider"></div>' +
-        '<a href="/" class="rail-item' + (isAlerts ? ' active' : '') + '" title="Alert Desk &amp; Tracker (/)" data-tip="Alert Desk">' +
-          '<span class="rail-ic">⌂</span>' +
-          '<span class="rail-lbl">Alert Desk</span>' +
-        '</a>' +
-        '<a href="/app/orderblock" class="rail-item' + (isOrderBlock ? ' active' : '') + '" title="Order Block Terminal (/app/orderblock)" data-tip="Order Block">' +
+        '<a href="/app/orderblock" class="rail-item' + (isOrderBlock ? ' active' : '') + '" title="Order Block Terminal (/app/orderblock)" data-tip="Order Block"' + (isOrderBlock ? ' aria-current="page"' : '') + '>' +
           '<span class="rail-ic">⟁</span>' +
           '<span class="rail-lbl">Order Block</span>' +
-        '</a>' +
-        '<a href="/app/journal" class="rail-item journey' + (isJournal && !isNewTrade ? ' active' : '') + '" title="My Journey &amp; Investment Booklet (/app/journal)" data-tip="My Journey">' +
-          '<span class="rail-ic">📖</span>' +
-          '<span class="rail-lbl">My Journey</span>' +
-        '</a>' +
-        '<a href="/app/journal?action=new" class="rail-item' + (isNewTrade ? ' active' : '') + '" title="Log New Investment in My Journey" data-tip="Log Trade">' +
-          '<span class="rail-ic">➕</span>' +
-          '<span class="rail-lbl">Log Trade</span>' +
         '</a>' +
       '</div>' +
       '<div class="rail-bottom">' +
@@ -100,20 +76,30 @@
           '<button type="button" class="rt-btn' + (curTheme === 'light' ? ' on' : '') + '" data-theme-set="light" title="Light theme" aria-label="Light theme">☀</button>' +
           '<button type="button" class="rt-btn' + (curTheme === 'dark' ? ' on' : '') + '" data-theme-set="dark" title="Dark theme" aria-label="Dark theme">☾</button>' +
         '</div>' +
+        '<a href="/app/settings" class="rail-item' + (isSettings ? ' active' : '') + '" id="obSettingsBtn" title="Settings · Upstox API &amp; Rules (/app/settings)" data-tip="Settings"' + (isSettings ? ' aria-current="page"' : '') + '>' +
+          '<span class="rail-ic" aria-hidden="true">' +
+            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+              '<circle cx="12" cy="12" r="3"></circle>' +
+              '<path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.6.77 1 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>' +
+            '</svg>' +
+          '</span>' +
+          '<span class="rail-lbl">Settings</span>' +
+        '</a>' +
       '</div>';
 
     document.body.insertBefore(aside, document.body.firstChild);
+
+    const syncRailWidthVar = function () {
+      document.documentElement.style.setProperty('--rail-w', aside.offsetWidth + 'px');
+    };
+    syncRailWidthVar();
 
     const toggleBtn = document.getElementById('obRailToggle');
     if (toggleBtn) {
       toggleBtn.addEventListener('click', function () {
         const exp = document.body.classList.toggle('rail-expanded');
         toggleBtn.textContent = exp ? '«' : '»';
-        try {
-          localStorage.setItem('ob_rail_expanded', exp ? '1' : '0');
-        } catch (_e) {
-          // Ignore storage errors
-        }
+        requestAnimationFrame(syncRailWidthVar);
       });
     }
 

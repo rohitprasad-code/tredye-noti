@@ -1,0 +1,595 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Settings · Upstox API &amp; Terminal</title>
+  <link rel="stylesheet" href="/vendor/fonts/inter-tight/latin-500.css">
+  <link rel="stylesheet" href="/vendor/fonts/inter-tight/latin-600.css">
+  <link rel="stylesheet" href="/vendor/fonts/inter-tight/latin-700.css">
+  <link rel="stylesheet" href="/vendor/fonts/jetbrains-mono/latin-400.css">
+  <link rel="stylesheet" href="/vendor/fonts/jetbrains-mono/latin-600.css">
+  <link rel="stylesheet" href="/theme-ob.css">
+  <style>
+    @media (prefers-reduced-motion: no-preference) {
+      @view-transition {
+        navigation: auto;
+      }
+    }
+
+    :root {
+      color-scheme: light dark;
+      --s-bg-light: #f4f6f9;
+      --s-bg-dark: #04060a;
+      --s-panel-light: #ffffff;
+      --s-panel-dark: #0a0f17;
+      --s-raised-light: #f8fafc;
+      --s-raised-dark: #0f1622;
+      --s-border-light: #cbd5e1;
+      --s-border-dark: #1a2433;
+      --s-ink-light: #0b1220;
+      --s-ink-dark: #eef3fa;
+      --s-muted-light: #475569;
+      --s-muted-dark: #9aa8bd;
+      --s-accent-light: #0e9f63;
+      --s-accent-dark: #19e58c;
+      --s-err-light: #c21d3c;
+      --s-err-dark: #ff6b81;
+      --s-err-bg-light: #fef2f4;
+      --s-err-bg-dark: rgba(255, 59, 92, 0.1);
+      --s-warn-light: #a86400;
+      --s-warn-dark: #fcd34d;
+
+      --s-bg: var(--s-bg-light);
+      --s-panel: var(--s-panel-light);
+      --s-raised: var(--s-raised-light);
+      --s-border: var(--s-border-light);
+      --s-ink: var(--s-ink-light);
+      --s-muted: var(--s-muted-light);
+      --s-accent: var(--s-accent-light);
+      --s-err: var(--s-err-light);
+      --s-err-bg: var(--s-err-bg-light);
+      --s-warn: var(--s-warn-light);
+
+      @media (prefers-color-scheme: dark) {
+        --s-bg: var(--s-bg-dark);
+        --s-panel: var(--s-panel-dark);
+        --s-raised: var(--s-raised-dark);
+        --s-border: var(--s-border-dark);
+        --s-ink: var(--s-ink-dark);
+        --s-muted: var(--s-muted-dark);
+        --s-accent: var(--s-accent-dark);
+        --s-err: var(--s-err-dark);
+        --s-err-bg: var(--s-err-bg-dark);
+        --s-warn: var(--s-warn-dark);
+      }
+
+      @supports (color: light-dark(white, black)) {
+        --s-bg: light-dark(var(--s-bg-light), var(--s-bg-dark));
+        --s-panel: light-dark(var(--s-panel-light), var(--s-panel-dark));
+        --s-raised: light-dark(var(--s-raised-light), var(--s-raised-dark));
+        --s-border: light-dark(var(--s-border-light), var(--s-border-dark));
+        --s-ink: light-dark(var(--s-ink-light), var(--s-ink-dark));
+        --s-muted: light-dark(var(--s-muted-light), var(--s-muted-dark));
+        --s-accent: light-dark(var(--s-accent-light), var(--s-accent-dark));
+        --s-err: light-dark(var(--s-err-light), var(--s-err-dark));
+        --s-err-bg: light-dark(var(--s-err-bg-light), var(--s-err-bg-dark));
+        --s-warn: light-dark(var(--s-warn-light), var(--s-warn-dark));
+      }
+
+      accent-color: var(--s-accent);
+      scrollbar-width: thin;
+      scrollbar-color: var(--s-border) transparent;
+    }
+
+    :root[data-theme="light"] { color-scheme: light; }
+    :root[data-theme="dark"] { color-scheme: dark; }
+
+    @supports not (scrollbar-color: auto) {
+      ::-webkit-scrollbar { width: 10px; height: 10px; }
+      ::-webkit-scrollbar-thumb { background: var(--s-border); border-radius: 999px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+    }
+
+    body.settings-page {
+      margin: 0;
+      min-height: 100dvh;
+      background: var(--s-bg);
+      color: var(--s-ink);
+      font-family: var(--f-ui);
+      line-height: 1.45;
+    }
+
+    .settings-main {
+      max-width: 720px;
+      margin-inline: auto;
+      padding: 28px 20px 56px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    .settings-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .settings-header h1 {
+      margin: 0;
+      font-size: 1.35rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .card-section {
+      background: var(--s-panel);
+      border: 1px solid var(--s-border);
+      border-radius: 14px;
+      padding: 18px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .card-section:has(:is(:user-invalid, .user-invalid-fallback)),
+    .card-section.has-error-fallback {
+      border-color: var(--s-err);
+    }
+
+    .card-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .card-head h2 {
+      margin: 0;
+      font-size: 1rem;
+      font-weight: 700;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      border: 1px solid var(--s-border);
+      background: var(--s-raised);
+      color: var(--s-muted);
+    }
+    .status-pill.ok {
+      color: var(--s-accent);
+      border-color: color-mix(in srgb, var(--s-accent) 45%, transparent);
+      background: color-mix(in srgb, var(--s-accent) 12%, transparent);
+    }
+    .status-pill.warn {
+      color: var(--s-warn);
+      border-color: color-mix(in srgb, var(--s-warn) 45%, transparent);
+      background: color-mix(in srgb, var(--s-warn) 12%, transparent);
+    }
+
+    .redirect-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .redirect-row code {
+      flex: 1;
+      min-width: 200px;
+      min-height: 44px;
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+      box-sizing: border-box;
+      border-radius: 10px;
+      border: 1px solid var(--s-border);
+      background: var(--s-raised);
+      color: var(--s-ink);
+      font-family: var(--f-num);
+      font-size: 0.82rem;
+      user-select: all;
+      overflow-x: auto;
+    }
+
+    fieldset.rule-group {
+      border: 0;
+      margin: 0;
+      padding: 0;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    @media (max-width: 600px) {
+      fieldset.rule-group { grid-template-columns: 1fr; }
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .field.full { grid-column: 1 / -1; }
+
+    .field label {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--s-muted);
+    }
+
+    .input-wrap {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .control {
+      width: 100%;
+      min-height: 44px;
+      padding: 0.55rem 0.8rem;
+      box-sizing: border-box;
+      border-radius: 10px;
+      border: 1px solid var(--s-border);
+      background: var(--s-raised);
+      color: var(--s-ink);
+      font: inherit;
+      font-size: max(1rem, 1em);
+    }
+
+    .control:focus-visible {
+      outline: 2px solid var(--s-accent);
+      outline-offset: 2px;
+      border-color: var(--s-accent);
+    }
+
+    .control:is(:user-invalid, .user-invalid-fallback) {
+      border-color: var(--s-err);
+      background: var(--s-err-bg);
+    }
+
+    .field:has(:is(:user-invalid, .user-invalid-fallback)) label,
+    .field.has-error-fallback label {
+      color: var(--s-err);
+    }
+
+    .error-msg {
+      display: none;
+      color: var(--s-err);
+      font-size: 0.8rem;
+      font-weight: 500;
+    }
+
+    .field:has(:is(:user-invalid, .user-invalid-fallback)) .error-msg,
+    .field.has-error-fallback .error-msg {
+      display: block;
+    }
+
+    .btn-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-block-start: 14px;
+    }
+
+    /* Uniform button type: all main action buttons share the max button width */
+    .btn-ui {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      min-width: 220px;
+      min-height: 44px;
+      padding: 0 16px;
+      box-sizing: border-box;
+      border-radius: 10px;
+      border: 1px solid var(--s-border);
+      background: var(--s-raised);
+      color: var(--s-ink);
+      text-decoration: none;
+      font: inherit;
+      font-size: 0.875rem;
+      font-weight: 600;
+      white-space: nowrap;
+      cursor: pointer;
+      transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+    }
+    .redirect-row .btn-ui,
+    .input-wrap .btn-ui {
+      min-width: 84px;
+    }
+    .btn-ui:hover {
+      border-color: var(--s-accent);
+      color: var(--s-accent);
+    }
+    .btn-ui:focus-visible {
+      outline: 2px solid var(--s-accent);
+      outline-offset: 2px;
+    }
+    .btn-ui:disabled {
+      opacity: 0.6;
+      cursor: progress;
+    }
+
+    .form-status {
+      min-height: 1.2rem;
+      font-size: 0.84rem;
+      font-weight: 500;
+      color: var(--s-muted);
+      margin-block-start: 8px;
+    }
+    .form-status.ok { color: var(--s-accent); }
+    .form-status.err { color: var(--s-err); }
+
+    .visually-hidden:where(:not(:focus-within, :active)) {
+      position: absolute !important;
+      clip-path: inset(50%) !important;
+      overflow: hidden !important;
+      width: 1px !important;
+      height: 1px !important;
+      margin: -1px !important;
+      padding: 0 !important;
+      border: 0 !important;
+      white-space: nowrap !important;
+    }
+  </style>
+</head>
+<body class="has-ob-rail settings-page">
+  <main class="settings-main">
+    <header class="settings-header">
+      <h1>Settings</h1>
+      <a href="/app/orderblock" class="btn-ui">← Back to Order Block</a>
+    </header>
+
+    <section class="card-section" id="upstoxSection" aria-labelledby="upstoxHeading">
+      <div class="card-head">
+        <h2 id="upstoxHeading">Upstox API</h2>
+        <span id="upstoxStatusBadge" class="status-pill">Checking…</span>
+      </div>
+
+      <div class="field">
+        <label for="upstoxRedirectCode">Redirect URL (<a href="https://account.upstox.com/developer/apps/createapp" target="_blank" rel="noopener" style="color:var(--s-accent);">Upstox App</a>)</label>
+        <div class="redirect-row">
+          <code id="upstoxRedirectCode">http://localhost:4600/api/upstox/callback</code>
+          <button type="button" id="copyRedirectBtn" class="btn-ui">Copy</button>
+        </div>
+      </div>
+
+      <form id="upstoxForm" aria-labelledby="upstoxHeading" method="POST" action="/api/upstox/config" novalidate>
+        <fieldset class="rule-group">
+          <legend class="visually-hidden">Upstox OAuth Credentials</legend>
+
+          <div class="field full">
+            <label for="upstoxApiKey">API Key</label>
+            <input
+              type="text"
+              id="upstoxApiKey"
+              name="apiKey"
+              class="control"
+              minlength="8"
+              placeholder="Paste Upstox API Key"
+              autocomplete="off"
+              autocorrect="off"
+              autocapitalize="none"
+              spellcheck="false"
+              enterkeyhint="next"
+              data-error="upstoxKeyError"
+            >
+            <div id="upstoxKeyError" class="error-msg">
+              <span role="img" aria-label="Error">❌</span> Enter a valid Upstox API Key (at least 8 characters).
+            </div>
+          </div>
+
+          <div class="field full">
+            <label for="upstoxApiSecret">API Secret</label>
+            <div class="input-wrap">
+              <input
+                type="password"
+                id="upstoxApiSecret"
+                name="apiSecret"
+                class="control"
+                minlength="6"
+                placeholder="Paste Upstox API Secret"
+                autocomplete="current-password"
+                autocorrect="off"
+                autocapitalize="none"
+                spellcheck="false"
+                enterkeyhint="done"
+                data-error="upstoxSecretError"
+              >
+              <button
+                type="button"
+                id="toggleSecretBtn"
+                class="btn-ui"
+                aria-pressed="false"
+                aria-label="Show API Secret"
+                aria-describedby="toggleSecretWarn"
+              >Show</button>
+              <span id="toggleSecretWarn" class="visually-hidden">Warning: this will display your API Secret on screen.</span>
+            </div>
+            <div id="upstoxSecretError" class="error-msg">
+              <span role="img" aria-label="Error">❌</span> Enter a valid Upstox API Secret (at least 6 characters).
+            </div>
+          </div>
+        </fieldset>
+
+        <div class="btn-row">
+          <button type="submit" id="upstoxConnectBtn" class="btn-ui">Save &amp; Login with Upstox</button>
+          <button type="button" id="upstoxDisconnectBtn" class="btn-ui" hidden>Disconnect</button>
+        </div>
+        <div id="upstoxStatusMsg" class="form-status" role="status" aria-live="polite"></div>
+      </form>
+    </section>
+
+    <section class="card-section" id="rulesSection" aria-labelledby="rulesHeading">
+      <div class="card-head">
+        <h2 id="rulesHeading">Terminal Rules</h2>
+      </div>
+
+      <form id="rulesForm" aria-labelledby="rulesHeading" method="POST" action="/api/settings" novalidate>
+        <fieldset class="rule-group">
+          <legend class="visually-hidden">Polling and Filter Rules</legend>
+
+          <div class="field">
+            <label for="cfgPollInterval">Poll Frequency (sec)</label>
+            <input
+              type="number"
+              id="cfgPollInterval"
+              name="pollIntervalSec"
+              class="control"
+              min="15"
+              max="300"
+              step="5"
+              required
+              inputmode="numeric"
+              data-error="pollError"
+            >
+            <div id="pollError" class="error-msg">
+              <span role="img" aria-label="Error">❌</span> Enter a value between 15 and 300.
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="cfgTopN">Top-N per Side</label>
+            <input
+              type="number"
+              id="cfgTopN"
+              name="topN"
+              class="control"
+              min="1"
+              max="15"
+              step="1"
+              required
+              inputmode="numeric"
+              data-error="topNError"
+            >
+            <div id="topNError" class="error-msg">
+              <span role="img" aria-label="Error">❌</span> Enter a value between 1 and 15.
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="cfgMinAgree">Min Signals (1–5)</label>
+            <input
+              type="number"
+              id="cfgMinAgree"
+              name="minAgree"
+              class="control"
+              min="1"
+              max="5"
+              step="1"
+              required
+              inputmode="numeric"
+              data-error="agreeError"
+            >
+            <div id="agreeError" class="error-msg">
+              <span role="img" aria-label="Error">❌</span> Enter a value between 1 and 5.
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="cfgObProx">OB Proximity (%)</label>
+            <input
+              type="number"
+              id="cfgObProx"
+              name="obProximityPct"
+              class="control"
+              min="0.05"
+              max="5"
+              step="0.05"
+              required
+              inputmode="decimal"
+              data-error="proxError"
+            >
+            <div id="proxError" class="error-msg">
+              <span role="img" aria-label="Error">❌</span> Enter a value between 0.05 and 5.
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="cfgConfirmPolls">Confirm Polls</label>
+            <input
+              type="number"
+              id="cfgConfirmPolls"
+              name="confirmPolls"
+              class="control"
+              min="1"
+              max="5"
+              step="1"
+              required
+              inputmode="numeric"
+              data-error="confirmError"
+            >
+            <div id="confirmError" class="error-msg">
+              <span role="img" aria-label="Error">❌</span> Enter a value between 1 and 5.
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="cfgMinPrice">Min Price (₹)</label>
+            <input
+              type="number"
+              id="cfgMinPrice"
+              name="minPrice"
+              class="control"
+              min="0"
+              step="10"
+              required
+              inputmode="numeric"
+              data-error="priceError"
+            >
+            <div id="priceError" class="error-msg">
+              <span role="img" aria-label="Error">❌</span> Enter 0 or higher.
+            </div>
+          </div>
+
+          <div class="field full">
+            <label for="cfgWatchlist">Watchlist (comma-separated, blank = all 218)</label>
+            <input
+              type="text"
+              id="cfgWatchlist"
+              name="watchlist"
+              class="control"
+              placeholder="RELIANCE, ICICIBANK, PAYTM"
+              autocorrect="off"
+              autocapitalize="characters"
+              spellcheck="false"
+            >
+          </div>
+
+          <div class="field full">
+            <label for="cfgIgnore">Ignore Symbols</label>
+            <input
+              type="text"
+              id="cfgIgnore"
+              name="ignoreSymbols"
+              class="control"
+              placeholder="IDEA, YESBANK"
+              autocorrect="off"
+              autocapitalize="characters"
+              spellcheck="false"
+            >
+          </div>
+        </fieldset>
+
+        <div class="btn-row">
+          <button type="submit" id="saveRulesBtn" class="btn-ui">Save Rules</button>
+        </div>
+        <div id="rulesStatusMsg" class="form-status" role="status" aria-live="polite"></div>
+      </form>
+    </section>
+  </main>
+
+  <script src="/nav-rail.js"></script>
+  <script src="/settings.js"></script>
+</body>
+</html>
