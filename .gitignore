@@ -4,6 +4,7 @@ node_modules/
 data/*.db
 data/*.db-wal
 data/*.db-shm
+data/upstox-token.json
 .recon/
 .DS_Store
 
