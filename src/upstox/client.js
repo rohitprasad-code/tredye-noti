@@ -47,7 +47,7 @@ class UpstoxClient {
     this.userProfile = null;
     this.issuedAt = 0;
 
-    this.instrumentBySymbol = new Map(); // RELIANCE -> { key, name, isin, lotSize }
+    this.instrumentBySymbol = new Map(); // RELIANCE -> { sym, key, exchangeToken, name, isin, lotSize }
     this.symbolByInstrumentKey = new Map(); // NSE_EQ|INE002A01018 -> RELIANCE
     this.instrumentsLoadedAt = 0;
 
@@ -264,7 +264,8 @@ class UpstoxClient {
         this.instrumentBySymbol.set(item.sym, item);
         this.symbolByInstrumentKey.set(item.key, item.sym);
       }
-      this.instrumentsLoadedAt = Number(raw.loadedAt || 0);
+      const firstEntryHasToken = !raw.entries.length || Boolean(raw.entries[0].exchangeToken);
+      this.instrumentsLoadedAt = Number(raw.version || 1) >= 2 && firstEntryHasToken ? Number(raw.loadedAt || 0) : 0;
       return this.instrumentBySymbol.size > 0;
     } catch {
       return false;
@@ -301,6 +302,7 @@ class UpstoxClient {
           const entry = {
             sym,
             key: r.instrument_key,
+            exchangeToken: r.exchange_token ? String(r.exchange_token).trim() : '',
             name: r.name || sym,
             isin: r.isin || '',
             lotSize: Number(r.lot_size || 1),
@@ -317,7 +319,7 @@ class UpstoxClient {
       fs.mkdirSync(path.dirname(this.instrumentsFile), { recursive: true });
       fs.writeFileSync(
         this.instrumentsFile,
-        JSON.stringify({ loadedAt: this.instrumentsLoadedAt, entries })
+        JSON.stringify({ version: 2, loadedAt: this.instrumentsLoadedAt, entries })
       );
     } catch {
       // ignore disk cache failures

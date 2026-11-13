@@ -108,81 +108,11 @@ function createDashboardServer(appController) {
     })
   );
 
-  // Schedule a reminder
-  app.post('/api/reminders', (req, res) => {
-    const body = req.body || {};
-    if (!body.symbol) {
-      return res.status(400).json({ error: 'symbol is required' });
-    }
-    const rem = appController.scheduleReminder({
-      symbol: body.symbol,
-      minutes: Number(body.minutes || 15),
-      expectedSide: body.expectedSide,
-      obBot: body.obBot,
-      obTop: body.obTop,
-      note: body.note,
-    });
-    res.json({ ok: true, reminder: rem });
-  });
-
-  // Cancel a reminder
-  app.delete('/api/reminders/:id', (req, res) => {
-    const id = Number(req.params.id);
-    appController.cancelReminder(id);
-    res.json({ ok: true });
-  });
-
-  // Snooze / unsnooze symbol
-  app.post('/api/snooze', (req, res) => {
-    const body = req.body || {};
-    if (!body.symbol) return res.status(400).json({ error: 'symbol is required' });
-    if (body.clear) {
-      appController.unsnoozeSymbol(body.symbol);
-    } else {
-      appController.snoozeSymbol(body.symbol, Number(body.minutes || 30));
-    }
-    res.json({ ok: true, snoozes: appController.store.listActiveSnoozes() });
-  });
-
-  // Mark single alert reviewed
-  app.post('/api/alerts/:id/review', (req, res) => {
-    const id = Number(req.params.id);
-    if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid alert id' });
-    const body = req.body || {};
-    appController.markAlertReviewed(id, body.reviewed ?? true);
-    res.json({ ok: true });
-  });
-
-  // Mark all alerts reviewed
-  app.post('/api/alerts/review-all', (_req, res) => {
-    appController.markAllAlertsReviewed();
-    res.json({ ok: true });
-  });
-
-  // Fire a test notification (macOS + Telegram)
-  app.post(
-    '/api/notify/test',
-    asyncHandler(async (req, res) => {
-      const body = req.body || {};
-      const result = await appController.sendTestNotification(body.symbol);
-      res.json({ ok: true, result });
-    })
-  );
-
   // Update settings
   app.post('/api/settings', (req, res) => {
     const updated = appController.updateConfig(req.body || {});
     res.json({ ok: true, config: updated });
   });
-
-  // Update Tredye credentials (.env + live client)
-  app.post(
-    '/api/credentials',
-    asyncHandler(async (req, res) => {
-      const resCred = await appController.updateCredentials(req.body || {});
-      res.json(resCred);
-    })
-  );
 
   // Upstox OAuth2 & Real-time Feed Endpoints
   app.get('/api/upstox/status', (_req, res) => {
@@ -240,42 +170,6 @@ function createDashboardServer(appController) {
   app.post('/api/upstox/disconnect', (_req, res) => {
     const status = appController.disconnectUpstox();
     res.json({ ok: true, status });
-  });
-
-  // My Tracker CRUD endpoints (Sell / Step-Back & Buy at Right Time)
-  app.get('/api/tracker', (_req, res) => {
-    res.set('Cache-Control', 'no-store');
-    res.json({ ok: true, tracker: appController.state.tracker });
-  });
-
-  app.post(
-    '/api/tracker',
-    asyncHandler(async (req, res) => {
-      const body = req.body || {};
-      if (!body.symbol) {
-        return res.status(400).json({ error: 'symbol is required' });
-      }
-      const item = await appController.upsertTrackerPosition(body);
-      res.json({ ok: true, item, tracker: appController.state.tracker });
-    })
-  );
-
-  app.post(
-    '/api/tracker/mode',
-    asyncHandler(async (req, res) => {
-      const body = req.body || {};
-      if (!body.symbol || !body.mode) {
-        return res.status(400).json({ error: 'symbol and mode are required' });
-      }
-      const item = await appController.switchTrackerMode(body.symbol, body.mode, body);
-      res.json({ ok: true, item, tracker: appController.state.tracker });
-    })
-  );
-
-  app.delete('/api/tracker/:symbol', (req, res) => {
-    const symbol = decodeURIComponent(req.params.symbol).toUpperCase();
-    appController.removeTrackerPosition(symbol);
-    res.json({ ok: true, tracker: appController.state.tracker });
   });
 
   // Local npm-installed vendor assets (immutable aggressive caching)

@@ -1759,6 +1759,154 @@ body.rail-expanded .ob-top-bar {
   }
 }
 
+/* ================= CLICK TO COPY & CMD+CLICK UPSTOX FEEDBACK ================= */
+.tile[data-copied="1"], .ticket[data-copied="1"], .anom[data-copied="1"] {
+  outline: 2px solid #19E58C !important;
+  outline-offset: 1px;
+  box-shadow: 0 0 0 1px rgba(25, 229, 140, .45), 0 0 20px rgba(25, 229, 140, .35) !important;
+}
+.tile[data-opened="1"], .ticket[data-opened="1"], .anom[data-opened="1"] {
+  outline: 2px solid #6382FF !important;
+  outline-offset: 1px;
+  box-shadow: 0 0 0 1px rgba(99, 130, 255, .45), 0 0 20px rgba(99, 130, 255, .38) !important;
+}
+.tile[data-copy-err="1"], .ticket[data-copy-err="1"], .anom[data-copy-err="1"] {
+  outline: 2px solid #FF3B5C !important;
+  outline-offset: 1px;
+}
+.ob-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+  padding: 0;
+  margin: -1px;
+}
+.ob-toast-region {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2500;
+}
+.ob-toast {
+  position: fixed;
+  inset: auto;
+  left: 50%;
+  bottom: 22px;
+  margin: 0;
+  transform: translate(-50%, 10px) scale(.98);
+  opacity: 0;
+  display: none;
+  align-items: center;
+  gap: 10px;
+  max-width: min(92vw, 460px);
+  padding: 9px 10px 9px 13px;
+  border-radius: 10px;
+  border: 1px solid rgba(25, 229, 140, .45);
+  background: rgba(10, 15, 23, .95);
+  color: var(--ink);
+  box-shadow: 0 16px 38px rgba(0, 0, 0, .58), 0 0 22px rgba(25, 229, 140, .14), inset 0 1px 0 rgba(255, 255, 255, .06);
+  pointer-events: auto;
+  font-family: var(--f-ui);
+  font-size: 12px;
+  line-height: 1.25;
+  transition-property: opacity, transform, display, overlay;
+  transition-duration: 180ms;
+  transition-timing-function: cubic-bezier(.22, 1, .36, 1);
+  transition-behavior: allow-discrete;
+}
+.ob-toast[data-kind="open"] {
+  border-color: rgba(99, 130, 255, .52);
+  box-shadow: 0 16px 38px rgba(0, 0, 0, .58), 0 0 22px rgba(99, 130, 255, .18), inset 0 1px 0 rgba(255, 255, 255, .06);
+}
+.ob-toast[data-kind="error"] {
+  border-color: rgba(255, 59, 92, .52);
+  box-shadow: 0 16px 38px rgba(0, 0, 0, .58), 0 0 22px rgba(255, 59, 92, .16), inset 0 1px 0 rgba(255, 255, 255, .06);
+}
+.ob-toast[popover]:is(:popover-open, .\:popover-open),
+.ob-toast:is(:popover-open, .\:popover-open) {
+  display: flex;
+  opacity: 1;
+  transform: translate(-50%, 0) scale(1);
+}
+@starting-style {
+  .ob-toast:is(:popover-open, .\:popover-open) {
+    opacity: 0;
+    transform: translate(-50%, 10px) scale(.98);
+  }
+}
+.ob-toast-ico {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 800;
+  flex: none;
+  background: rgba(25, 229, 140, .18);
+  color: #7CFFC4;
+}
+.ob-toast[data-kind="open"] .ob-toast-ico {
+  background: rgba(99, 130, 255, .2);
+  color: #A5B8FF;
+}
+.ob-toast[data-kind="error"] .ob-toast-ico {
+  background: rgba(255, 59, 92, .2);
+  color: #FF9AA8;
+}
+.ob-toast-body {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.ob-toast-msg {
+  font-weight: 700;
+  letter-spacing: .01em;
+  color: var(--ink);
+  white-space: nowrap;
+}
+.ob-toast-sub {
+  font-size: 11px;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.ob-toast-close {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--ink-3);
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  flex: none;
+  margin-left: 2px;
+  transition: color .14s, background .14s;
+}
+.ob-toast-close:hover, .ob-toast-close:focus-visible {
+  color: var(--ink);
+  background: rgba(255, 255, 255, .08);
+  outline: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ob-toast {
+    transition-duration: 0.01ms;
+    transform: translate(-50%, 0) scale(1);
+  }
+}
+
 </style>
 <style id="obf-light">
 /* ================= OrderBlock · light theme for the Order Block terminal =================
@@ -2009,6 +2157,18 @@ body.rail-expanded .ob-top-bar {
 :root[data-theme=light] .obl-note{border-top-color:rgba(28,38,64,.1)}
 :root[data-theme=light] .obl-note a{color:#5856F2}
 :root[data-theme=light] .ichart .obl-lock{background:rgba(255,255,255,.88);box-shadow:0 0 0 1px rgba(28,38,64,.12),0 6px 18px rgba(15,23,42,.12)}
+:root[data-theme=light] .tile[data-copied="1"],
+:root[data-theme=light] .ticket[data-copied="1"],
+:root[data-theme=light] .anom[data-copied="1"]{outline-color:#0E9F63 !important;box-shadow:0 0 0 1px rgba(14,159,99,.4),0 0 18px rgba(14,159,99,.24) !important}
+:root[data-theme=light] .tile[data-opened="1"],
+:root[data-theme=light] .ticket[data-opened="1"],
+:root[data-theme=light] .anom[data-opened="1"]{outline-color:#3B5BDB !important;box-shadow:0 0 0 1px rgba(59,91,219,.4),0 0 18px rgba(59,91,219,.24) !important}
+:root[data-theme=light] .ob-toast{background:rgba(255,255,255,.97);border-color:rgba(14,159,99,.45);box-shadow:0 16px 36px rgba(15,23,42,.16),0 0 0 1px rgba(15,23,42,.05)}
+:root[data-theme=light] .ob-toast[data-kind="open"]{border-color:rgba(59,91,219,.48)}
+:root[data-theme=light] .ob-toast-ico{background:rgba(14,159,99,.14);color:#087A4A}
+:root[data-theme=light] .ob-toast[data-kind="open"] .ob-toast-ico{background:rgba(59,91,219,.14);color:#364FC7}
+:root[data-theme=light] .ob-toast[data-kind="error"] .ob-toast-ico{background:rgba(226,61,79,.14);color:#C21D3C}
+:root[data-theme=light] .ob-toast-close:hover,:root[data-theme=light] .ob-toast-close:focus-visible{background:rgba(15,23,42,.08)}
 </style>
 <script>
 /* OrderBlock · light theme. The terminal follows the app's sun / moon toggle: the parent page posts
@@ -2291,6 +2451,17 @@ body.rail-expanded .ob-top-bar {
   
 </div>
 <div id="stack"></div>
+<div class="ob-toast-region" role="region" aria-label="Notifications">
+  <div id="obActionToast" class="ob-toast" popover="manual">
+    <span class="ob-toast-ico" aria-hidden="true">✓</span>
+    <span class="ob-toast-body">
+      <span class="ob-toast-msg"></span>
+      <span class="ob-toast-sub"></span>
+    </span>
+    <button type="button" class="ob-toast-close" popovertarget="obActionToast" popovertargetaction="hide" aria-label="Dismiss notification">×</button>
+  </div>
+  <div id="obActionAnnounce" class="ob-sr" role="status" aria-live="polite" aria-atomic="true"></div>
+</div>
 
 <script>
 /* OrderBlock 5-Stage Visual Funnel Live Feed (Unlocked, Real-Time 218 NSE F&O) */
@@ -4214,7 +4385,8 @@ function applyTicker(tk, f) {
 function buildTile(M, T, parent, mode, defer) {
   const s = T.s, side = s.side; const pick = !!T.pick; const ev = !!s.event;
   const d = el('div', `tile ${T.key}${pick ? ' pk' : ''}${ev ? ' ev' : ''} ${side > 0 ? 'bu' : 'be'}`, parent);
-  d.dataset.k = s.s; d.style.setProperty('--sc', ev ? '255,176,32' : SC[side]); d.style.setProperty('--hi', ev ? '255,176,32' : SCHI[side]);
+  d.dataset.k = s.s; if (!s._anchor) d.title = `${s.s} · Click to copy code · ⌘+Click to open Upstox`;
+  d.style.setProperty('--sc', ev ? '255,176,32' : SC[side]); d.style.setProperty('--hi', ev ? '255,176,32' : SCHI[side]);
   if (mode !== 'stack') css(d, { left: T.x, top: T.y, width: T.w, height: T.h });
   else css(d, { position: 'relative', width: '100%', height: T.h });
   const strength = Math.abs(2 * s.p - 1);
@@ -4711,7 +4883,8 @@ function buildTicket(M, TK, parent, mode) {
   const T = stack ? 1 : S.tx;
   const kk = (stack ? 1 : S.s) * S.dpr;
   const d = el('div', `ticket ${side > 0 ? 'buy' : 'sell'} p${TK.pick}${big ? ' hero' : compact ? ' compact' : ' std'}`, parent);
-  d.dataset.k = s.s; if (!stack && s.s === M.buyPicks[0].s) d.setAttribute('data-hover-demo', '1');
+  d.dataset.k = s.s; if (!s._anchor) d.title = `${s.s} · Click to copy code · ⌘+Click to open Upstox`;
+  if (!stack && s.s === M.buyPicks[0].s) d.setAttribute('data-hover-demo', '1');
   d.style.setProperty('--sc', rgb); d.style.setProperty('--hi', SCHI[side]); d.style.setProperty('--hot', SCHOT[side]);
   TK.el = d;
   el('div', 'gb', d);
@@ -4827,6 +5000,7 @@ function fitTicket(TK) {
 }
 function buildAnomaly(M, TK, parent, mode) {
   const s = TK.s; const stack = mode === 'stack'; const a = el('div', 'anom', parent); a.dataset.k = s.s;
+  if (!s._anchor) a.title = `${s.s} · Click to copy code · ⌘+Click to open Upstox`;
   if (!stack) css(a, { left: TK.x, top: TK.y, width: TK.w, height: TK.h }); else css(a, { position: 'relative', width: '100%', height: 54 });
   a.innerHTML = `<div class="hz"><span>⊘</span></div><div class="anin"><div class="aid"><span class="tk">${s.s}</span><span class="sub">${s.n.toUpperCase()} · ${s.sec}</span></div>` +
     `<div class="apx"><span class="pc">${pctStr(s.c)}</span><span class="lt">₹${inr(s.l)}</span></div><span class="spk"></span>` +
@@ -5400,6 +5574,198 @@ function placeInspector(e) {
     i.style.opacity = "1";
   }
 }
+const _cardFlashTimers = new WeakMap();
+let _toastTimer = null;
+let _toastRemainingMs = 2800;
+let _toastStartedAt = 0;
+let _toastBound = false;
+let _lastAnnouncedMsg = '';
+
+function buildUpstoxTradeUrl(s) {
+  if (s && s.et) {
+    return `https://pro.upstox.com/chart?chartSegment=NSE_EQ&chartToken=${encodeURIComponent(String(s.et))}`;
+  }
+  if (s && s.isin) {
+    return `https://upstox.com/stocks/stock/${encodeURIComponent(String(s.isin))}/`;
+  }
+  return 'https://pro.upstox.com/';
+}
+
+function flashCardAttr(cardEl, attr, durationMs = 1300) {
+  if (!cardEl || !cardEl.setAttribute) return;
+  const prev = _cardFlashTimers.get(cardEl);
+  if (prev) clearTimeout(prev.t);
+  cardEl.removeAttribute('data-copied');
+  cardEl.removeAttribute('data-opened');
+  cardEl.removeAttribute('data-copy-err');
+  cardEl.setAttribute(attr, '1');
+  const t = setTimeout(() => {
+    cardEl.removeAttribute(attr);
+    _cardFlashTimers.delete(cardEl);
+  }, durationMs);
+  _cardFlashTimers.set(cardEl, { t });
+}
+
+function announceAction(msg) {
+  if (!msg) return;
+  if ('ariaNotify' in document && typeof document.ariaNotify === 'function') {
+    try { document.ariaNotify(msg); return; } catch {}
+  }
+  const live = document.getElementById('obActionAnnounce');
+  if (!live) return;
+  const text = msg === _lastAnnouncedMsg ? `${msg}\u00A0` : msg;
+  _lastAnnouncedMsg = text;
+  live.textContent = '';
+  requestAnimationFrame(() => { live.textContent = text; });
+}
+
+function pauseToastTimer() {
+  if (!_toastTimer) return;
+  clearTimeout(_toastTimer);
+  _toastTimer = null;
+  _toastRemainingMs = Math.max(400, _toastRemainingMs - (Date.now() - _toastStartedAt));
+}
+
+function startToastTimer(ms) {
+  clearTimeout(_toastTimer);
+  _toastRemainingMs = ms;
+  _toastStartedAt = Date.now();
+  _toastTimer = setTimeout(hideActionToast, ms);
+}
+
+function hideActionToast() {
+  clearTimeout(_toastTimer);
+  _toastTimer = null;
+  const toast = document.getElementById('obActionToast');
+  if (!toast) return;
+  if (typeof toast.hidePopover === 'function') {
+    try {
+      if (toast.matches(':popover-open')) toast.hidePopover();
+    } catch {}
+  }
+  toast.classList.remove(':popover-open');
+}
+
+function ensureToastBound() {
+  if (_toastBound) return null;
+  const toast = document.getElementById('obActionToast');
+  if (!toast) return null;
+  _toastBound = true;
+  if (toast.getAttribute('popover') !== 'manual') {
+    toast.setAttribute('popover', 'manual');
+  }
+  toast.addEventListener('pointerenter', pauseToastTimer);
+  toast.addEventListener('focusin', pauseToastTimer);
+  const maybeResume = () => {
+    if (!toast.matches(':hover') && !toast.contains(document.activeElement)) {
+      startToastTimer(_toastRemainingMs || 1800);
+    }
+  };
+  toast.addEventListener('pointerleave', maybeResume);
+  toast.addEventListener('focusout', () => setTimeout(maybeResume, 0));
+  const btn = toast.querySelector('.ob-toast-close');
+  if (btn) btn.addEventListener('click', hideActionToast);
+  return toast;
+}
+
+function showActionToast({ kind = 'copy', ico = '✓', msg = '', sub = '', durationMs = 2800 } = {}) {
+  const toast = document.getElementById('obActionToast');
+  if (!toast) return;
+  ensureToastBound();
+  toast.dataset.kind = kind;
+  const icoEl = toast.querySelector('.ob-toast-ico');
+  const msgEl = toast.querySelector('.ob-toast-msg');
+  const subEl = toast.querySelector('.ob-toast-sub');
+  if (icoEl) icoEl.textContent = ico;
+  if (msgEl) msgEl.textContent = msg;
+  if (subEl) subEl.textContent = sub;
+  if (typeof toast.showPopover === 'function') {
+    try {
+      if (!toast.matches(':popover-open')) toast.showPopover();
+    } catch {
+      toast.classList.add(':popover-open');
+    }
+  } else {
+    toast.classList.add(':popover-open');
+  }
+  if (!toast.matches(':hover') && !toast.contains(document.activeElement)) {
+    startToastTimer(durationMs);
+  } else {
+    _toastRemainingMs = durationMs;
+  }
+  announceAction(sub ? `${msg}. ${sub}` : msg);
+}
+
+function legacyCopyText(text) {
+  const active = document.activeElement;
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.setAttribute('readonly', '');
+  ta.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0;pointer-events:none';
+  document.body.appendChild(ta);
+  ta.select();
+  ta.setSelectionRange(0, text.length);
+  let ok = false;
+  try { ok = document.execCommand('copy'); } catch { ok = false; }
+  ta.remove();
+  if (active && typeof active.focus === 'function' && document.contains(active)) {
+    try { active.focus({ preventScroll: true }); } catch {}
+  }
+  return ok;
+}
+
+function handleCopyResult(ok, sym, cardEl) {
+  if (ok) {
+    flashCardAttr(cardEl, 'data-copied', 1300);
+    showActionToast({
+      kind: 'copy',
+      ico: '✓',
+      msg: `Copied ${sym}`,
+      sub: 'Paste in broker · ⌘+Click opens Upstox',
+    });
+  } else {
+    flashCardAttr(cardEl, 'data-copy-err', 1300);
+    showActionToast({
+      kind: 'error',
+      ico: '!',
+      msg: `Could not copy ${sym}`,
+      sub: 'Clipboard permission denied',
+      durationMs: 3600,
+    });
+  }
+}
+
+async function copyStockCode(sym, cardEl) {
+  const code = String(sym || '').trim();
+  if (!code) return;
+  let ok = false;
+  if (navigator.clipboard && window.isSecureContext) {
+    try {
+      await navigator.clipboard.writeText(code);
+      ok = true;
+    } catch {
+      ok = legacyCopyText(code);
+    }
+  } else {
+    ok = legacyCopyText(code);
+  }
+  handleCopyResult(ok, code, cardEl);
+}
+
+function openUpstoxStockTab(s, cardEl) {
+  if (!s || !s.s || s._anchor) return;
+  const url = buildUpstoxTradeUrl(s);
+  window.open(url, '_blank', 'noopener,noreferrer');
+  flashCardAttr(cardEl, 'data-opened', 1400);
+  showActionToast({
+    kind: 'open',
+    ico: '↗',
+    msg: `Opening ${s.s} in Upstox`,
+    sub: s.et ? 'Upstox Pro chart & order pad' : (s.isin ? 'Upstox stock page' : 'Upstox Pro'),
+    durationMs: 2800,
+  });
+}
+
 function bindInteractions() {
   const st = $('#stage'); if (st._bound) return; st._bound = true;
   st.addEventListener('mousemove', e => {
@@ -5416,6 +5782,21 @@ function bindInteractions() {
   });
   st.addEventListener('mouseleave', () => { FX.ptr = null; setBrush(null); });
   st.addEventListener('click', e => {
+    const card = e.target && e.target.closest ? e.target.closest('.ticket, .tile, .anom') : null;
+    if (card) {
+      const sym = card.dataset && card.dataset.k;
+      const s = sym && M && M.bySym ? M.bySym[sym] : null;
+      if (s && !s._anchor) {
+        if (e.metaKey) {
+          e.preventDefault();
+          openUpstoxStockTab(s, card);
+          return;
+        }
+        copyStockCode(s.s, card);
+        if (FX.pinned) { FX.pinned = null; applyBrush(FX.hover, e); }
+        return;
+      }
+    }
     if (FX.pinned) { FX.pinned = null; applyBrush(FX.hover, e); return; }
     if (FX.hover) FX.pinned = Object.assign({}, FX.hover);
   });
@@ -6224,10 +6605,23 @@ function phTap(e, target) {
   // a tap that opens something on the page while a section's intro plays waits for it (the build is never disturbed);
   // the intro is asked to finish quickly, so the wait stays short (≤ ~0.8 s)
   if (PH.hurry && PH.introBusy()) PH.hurry();
-  if (performance.now() < PH.holdUntil) { const t = target, cx = e.clientX, cy = e.clientY; setTimeout(() => phTap({ clientX: cx, clientY: cy, target: t }, t), PH.holdUntil - performance.now() + 10); return; }
+  const card = target && target.closest ? target.closest('.ticket, .tile, .anom') : null;
+  const cardSym = card && card.dataset && card.dataset.k;
+  const cardStock = cardSym && PH.body && PH.body.contains(card) && M && M.bySym ? M.bySym[cardSym] : null;
+  if (cardStock && !cardStock._anchor) {
+    if (e.metaKey) {
+      if (typeof e.preventDefault === 'function') e.preventDefault();
+      openUpstoxStockTab(cardStock, card);
+      return;
+    }
+    if (!e._retried) copyStockCode(cardStock.s, card);
+    if (e.pointerType && e.pointerType !== 'touch') return;
+  }
+  if (performance.now() < PH.holdUntil) { const t = target, cx = e.clientX, cy = e.clientY, mk = !!e.metaKey, pt = e.pointerType || ''; setTimeout(() => phTap({ clientX: cx, clientY: cy, target: t, metaKey: mk, pointerType: pt, _retried: true }, t), PH.holdUntil - performance.now() + 10); return; }
   const k = target.closest('[data-k]');
   if (k && PH.body && PH.body.contains(k) && M.bySym[k.dataset.k]) {
     const s = M.bySym[k.dataset.k];
+    if (s._anchor) return;
     if (s.event && (k.classList.contains('anom') || k.closest('.phbay.ev'))) { phOpenStock(s.s, [s.s], { kind: 'anomaly', el: k }); return; }
     const inBay = k.closest('.phbay');
     phOpenStock(s.s, inBay ? phCtxSetups() : phCtxBranch(s.side), { el: k });

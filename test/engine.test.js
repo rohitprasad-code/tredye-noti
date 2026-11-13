@@ -2,11 +2,15 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const { evaluateConfluence, scoreAndRankUniverse } = require('../src/engine/flow');
 const { detectOrderBlocks, locateActionableOB } = require('../src/engine/orderblocks');
 const { SignalEngine } = require('../src/engine/signals');
 const { FlowStore } = require('../src/store/db');
-const { buildOrderBlockRealData, compareOrderBlockCandidates, computeSetupScore } = require('../src/index');
+const { UpstoxClient } = require('../src/upstox/client');
+const { TredyeFlowService, buildOrderBlockRealData, compareOrderBlockCandidates, computeSetupScore } = require('../src/index');
 const { createSampleDataset, buildBullishOBCandles, buildBearishOBCandles } = require('../data/sample-fixture');
 
 test('evaluateConfluence matches Tredye sI() 5-signal bull/bear scoring', () => {
@@ -303,6 +307,101 @@ test('computeSetupScore and SETUP_SCORE sort reward aligned OB proximity + stron
     .sort((a, b) => compareOrderBlockCandidates(a, b, true, 'SETUP_SCORE'))
     .map(x => x.symbol);
   assert.deepEqual(bySetup, ['ICICIBANK', 'ABCAPITAL']);
+});
+
+test('UpstoxClient.loadCachedInstruments invalidates v1 cache lacking exchangeToken and preserves v2', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tredye-upstox-cache-'));
+  try {
+    const cacheFile = path.join(tmpDir, 'instruments.json');
+    const client = new UpstoxClient({});
+    client.instrumentsFile = cacheFile;
+
+    // Legacy v1 cache without exchangeToken should load fallback map but force refresh (instrumentsLoadedAt === 0)
+    fs.writeFileSync(
+      cacheFile,
+      JSON.stringify({
+        loadedAt: Date.now(),
+        entries: [{ sym: 'RELIANCE', key: 'NSE_EQ|INE002A01018', name: 'Reliance Industries', isin: 'INE002A01018', lotSize: 1 }],
+      })
+    );
+    assert.equal(client.loadCachedInstruments(), true);
+    assert.equal(client.instrumentsLoadedAt, 0);
+    assert.equal(client.instrumentBySymbol.get('RELIANCE')?.isin, 'INE002A01018');
+
+    // Version 2 cache with exchangeToken retains its loadedAt timestamp
+    const freshTs = Date.now();
+    fs.writeFileSync(
+      cacheFile,
+      JSON.stringify({
+        version: 2,
+        loadedAt: freshTs,
+        entries: [{ sym: 'RELIANCE', key: 'NSE_EQ|INE002A01018', exchangeToken: '2885', name: 'Reliance Industries', isin: 'INE002A01018', lotSize: 1 }],
+      })
+    );
+    assert.equal(client.loadCachedInstruments(), true);
+    assert.equal(client.instrumentsLoadedAt, freshTs);
+    assert.equal(client.instrumentBySymbol.get('RELIANCE')?.exchangeToken, '2885');
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('getOrderBlockFunnelSnapshot includes Upstox exchangeToken (et) and isin on formatted stocks', async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tredye-ob-et-'));
+  const svc = new TredyeFlowService({ demo: true, dryRun: true, dbPath: path.join(tmpDir, 'flow.db') });
+  try {
+    // Prevent network fetches during offline unit test while injecting known instrument metadata
+    svc.upstox.accessToken = '';
+    svc.upstox.hasCredentials = () => false;
+    svc.upstox.instrumentBySymbol.set('RELIANCE', {
+      sym: 'RELIANCE',
+      key: 'NSE_EQ|INE002A01018',
+      exchangeToken: '2885',
+      name: 'Reliance Industries',
+      isin: 'INE002A01018',
+      lotSize: 1,
+    });
+    svc.state.allRanked = [
+      {
+        symbol: 'RELIANCE',
+        name: 'Reliance Industries',
+        sector: 'ENERGY',
+        chgPct: 2.1,
+        ltp: 2928.4,
+        prevClose: 2868.2,
+        agree: 5,
+        rupeeFlowCr: 420,
+        strengthScore: 78,
+        buildup: 'LONG BUILD-UP',
+        bestBullOB: { str: 2.2, status: 'IN_ZONE', distPct: 0, invalidated: false, mit: false },
+      },
+      {
+        symbol: 'UNMAPPED',
+        name: 'Unmapped Corp',
+        sector: 'IT',
+        chgPct: -1.4,
+        ltp: 100,
+        prevClose: 101.4,
+        agree: 4,
+        rupeeFlowCr: -80,
+        strengthScore: 60,
+        buildup: 'SHORT BUILD-UP',
+        bestBearOB: { str: 1.8, status: 'UNTESTED', distPct: 0.4, invalidated: false, mit: false },
+      },
+    ];
+    const snap = await svc.getOrderBlockFunnelSnapshot({ sector: 'ALL', side: 'ALL', sort: 'MAX_GAINS' });
+    const rel = snap.stocks.find(x => x.s === 'RELIANCE');
+    const unmapped = snap.stocks.find(x => x.s === 'UNMAPPED');
+    assert.ok(rel, 'Expected RELIANCE in funnel snapshot');
+    assert.equal(rel.et, '2885');
+    assert.equal(rel.isin, 'INE002A01018');
+    assert.ok(unmapped, 'Expected UNMAPPED in funnel snapshot');
+    assert.equal(unmapped.et, null);
+    assert.equal(unmapped.isin, null);
+  } finally {
+    svc.store.close();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
 });
 
 

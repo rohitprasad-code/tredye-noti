@@ -9,7 +9,6 @@ const { scoreAndRankUniverse } = require('./engine/flow');
 const { locateActionableOB } = require('./engine/orderblocks');
 const { SignalEngine } = require('./engine/signals');
 const { FlowStore } = require('./store/db');
-const { dispatchAlertNotification } = require('./notify');
 const { createDashboardServer } = require('./server/server');
 const { createSampleDataset } = require('../data/sample-fixture');
 
@@ -380,52 +379,13 @@ class TredyeFlowService {
       topBear: [],
       allRanked: [],
       sectors: [],
-      tracker: [],
     };
 
     this.broadcast = () => {};
     this.pollTimer = null;
-    this.reminderTimer = null;
     this.isPolling = false;
     this.upstoxTickTimer = null;
     this.pendingUpstoxTicks = {};
-    this.seedStarterTrackerIfEmpty();
-  }
-
-  seedStarterTrackerIfEmpty() {
-    try {
-      const existing = this.store.listTrackerItems();
-      const alreadySeeded = this.store.db
-        .prepare(`SELECT value FROM settings WHERE key = 'tracker_seeded'`)
-        .get();
-      if (existing.length === 0 && !alreadySeeded) {
-        this.store.upsertTrackerItem({
-          symbol: 'TATAMOTORS',
-          mode: 'SELL_WATCH',
-          entryPrice: 858,
-          stopPrice: 845,
-          notes: 'Holding — remind me on Bearish OB or BEAR flow to step back',
-        });
-        this.store.upsertTrackerItem({
-          symbol: 'RELIANCE',
-          mode: 'SELL_WATCH',
-          entryPrice: 2890,
-          targetPrice: 2948,
-          notes: 'Riding up move — alert if flow flips BEAR or hits R1 ₹2,948',
-        });
-        this.store.upsertTrackerItem({
-          symbol: 'ICICIBANK',
-          mode: 'BUY_WATCH',
-          targetPrice: 1286,
-          notes: 'Stepped back earlier — notify when in Bullish OB + BULL flow to buy at right time',
-        });
-        this.store.db
-          .prepare(`INSERT OR REPLACE INTO settings (key, value) VALUES ('tracker_seeded', '1')`)
-          .run();
-      }
-    } catch {
-      // ignore
-    }
   }
 
   enrichCardItem(stock, flow) {
@@ -493,8 +453,6 @@ class TredyeFlowService {
       sourceMode: this.state.sourceMode,
       authStatus: this.state.authStatus,
       hasCredentials: this.client.hasCredentials(),
-      configuredEmail: this.client.email || null,
-      telegramConfigured: Boolean(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID),
       upstox: this.upstox.getStatus(),
       lastError: this.state.lastError,
       lastPollAt: this.state.lastPollAt,
@@ -506,10 +464,7 @@ class TredyeFlowService {
       topBear: this.state.topBear,
       universe: this.state.allRanked,
       sectors: this.state.sectors,
-      tracker: this.state.tracker,
       alerts: this.store.listAlerts(50, true),
-      reminders: this.store.listPendingReminders(),
-      snoozes: this.store.listActiveSnoozes(),
       config: this.config,
     };
   }
@@ -605,9 +560,12 @@ class TredyeFlowService {
       const maxTop = isBull ? Math.min(20, maxContendersPerSide) : Math.min(20, maxBearContenders);
       const isTop = idx < maxTop;
 
+      const inst = this.upstox?.instrumentBySymbol?.get(c.symbol);
       const item = {
         s: c.symbol,
         n: c.name || c.symbol,
+        et: inst?.exchangeToken || null,
+        isin: inst?.isin || null,
         sec: String(c.sector || 'OTHER').toUpperCase(),
         g: isBull ? 'bull' : 'bear',
         c: Number(chg.toFixed(2)),
@@ -678,51 +636,6 @@ class TredyeFlowService {
       sectors: activeSectors.length ? activeSectors : allSectors,
       stocks: stocksOut,
     };
-  }
-
-  recomputeTrackerState({ emitAlerts = false, manual = false } = {}) {
-    const trackerItems = this.store.listTrackerItems();
-    for (const item of trackerItems) {
-      const stock = this.state.stocksBySymbol.get(item.symbol);
-      if (stock && !this.state.obBySymbol.has(item.symbol)) {
-        const obInfo = locateActionableOB(
-          stock,
-          this.state.detailBySymbol.get(item.symbol),
-          this.state.flowBySymbol[item.symbol]
-        );
-        this.state.obBySymbol.set(item.symbol, obInfo);
-      }
-    }
-
-    const { enrichedTracker, trackerAlerts } = this.signals.evaluateTrackerPositions(
-      trackerItems,
-      {
-        bySymbol: this.state.flowBySymbol,
-        stocksBySymbol: this.state.stocksBySymbol,
-        obBySymbol: this.state.obBySymbol,
-      },
-      this.config,
-      Date.now()
-    );
-
-    this.state.tracker = enrichedTracker;
-
-    const saved = [];
-    if (emitAlerts && trackerAlerts.length > 0) {
-      for (const alert of trackerAlerts) {
-        const id = this.store.insertAlert(alert);
-        const stored = { ...alert, id, reviewed: false };
-        saved.push(stored);
-        if (!this.dryRun) {
-          if (this.state.sourceMode === 'LIVE' || manual) {
-            dispatchAlertNotification(stored, this.config, this.dashboardUrl).catch(() => {});
-          }
-          this.broadcast('alert', stored);
-        }
-      }
-    }
-
-    return { enrichedTracker, trackerAlerts, saved };
   }
 
   async getStockDetail(symbol) {
@@ -929,25 +842,7 @@ class TredyeFlowService {
         Date.now()
       );
 
-      // Evaluate any due reminders
-      const dueReminders = this.store.getDueReminders(Date.now());
-      const reminderAlerts = this.signals.evaluateDueReminders(
-        dueReminders,
-        {
-          bySymbol: this.state.flowBySymbol,
-          stocksBySymbol: this.state.stocksBySymbol,
-          obBySymbol: this.state.obBySymbol,
-        },
-        Date.now()
-      );
-      for (const rem of dueReminders) {
-        this.store.markReminderFired(rem.id);
-      }
-
-      // Evaluate "My Tracker" positions (Sell / Step-Back & Buy at Right Time)
-      const { trackerAlerts } = this.recomputeTrackerState({ emitAlerts: false });
-
-      const allTriggered = [...reminderAlerts, ...trackerAlerts, ...warmupAlerts, ...newAlerts];
+      const allTriggered = [...warmupAlerts, ...newAlerts];
       const savedAlerts = [];
 
       for (const alert of allTriggered) {
@@ -956,16 +851,6 @@ class TredyeFlowService {
         savedAlerts.push(stored);
 
         if (!this.dryRun) {
-          // Dispatch macOS + Telegram notification for live mode or manual/reminder/tracker triggers
-          const shouldNotifyOs =
-            this.state.sourceMode === 'LIVE' ||
-            alert.type === 'REMINDER_DUE' ||
-            alert.type === 'TRACKER_SELL' ||
-            alert.type === 'TRACKER_BUY' ||
-            (manual && savedAlerts.length <= 3);
-          if (shouldNotifyOs) {
-            dispatchAlertNotification(stored, this.config, this.dashboardUrl).catch(() => {});
-          }
           this.broadcast('alert', stored);
         }
       }
@@ -980,127 +865,6 @@ class TredyeFlowService {
     } finally {
       this.isPolling = false;
     }
-  }
-
-  async checkDueRemindersTick() {
-    const due = this.store.getDueReminders(Date.now());
-    if (due.length === 0) return;
-
-    // If last poll was > 20s ago, run a fresh poll first so the reminder checks fresh data
-    if (!this.state.lastPollAt || Date.now() - this.state.lastPollAt > 20000) {
-      await this.runPollCycle();
-      return;
-    }
-
-    const reminderAlerts = this.signals.evaluateDueReminders(
-      due,
-      {
-        bySymbol: this.state.flowBySymbol,
-        stocksBySymbol: this.state.stocksBySymbol,
-        obBySymbol: this.state.obBySymbol,
-      },
-      Date.now()
-    );
-
-    for (const rem of due) {
-      this.store.markReminderFired(rem.id);
-    }
-
-    for (const alert of reminderAlerts) {
-      const id = this.store.insertAlert(alert);
-      const stored = { ...alert, id, reviewed: false };
-      dispatchAlertNotification(stored, this.config, this.dashboardUrl).catch(() => {});
-      this.broadcast('alert', stored);
-    }
-
-    this.broadcast('state', this.getPublicState());
-  }
-
-  scheduleReminder({ symbol, minutes = 15, expectedSide, obBot, obTop, note }) {
-    const sym = symbol.toUpperCase();
-    const flow = this.state.flowBySymbol[sym];
-    const obInfo = this.state.obBySymbol.get(sym);
-    const rem = this.store.addReminder({
-      symbol: sym,
-      minutes,
-      expectedSide: expectedSide || flow?.side || null,
-      obBot: obBot ?? obInfo?.primaryOB?.bot ?? null,
-      obTop: obTop ?? obInfo?.primaryOB?.top ?? null,
-      note: note || null,
-    });
-    this.broadcast('state', this.getPublicState());
-    return rem;
-  }
-
-  cancelReminder(id) {
-    this.store.cancelReminder(id);
-    this.broadcast('state', this.getPublicState());
-  }
-
-  snoozeSymbol(symbol, minutes = 30) {
-    this.store.snoozeSymbol(symbol, minutes);
-    this.broadcast('state', this.getPublicState());
-  }
-
-  unsnoozeSymbol(symbol) {
-    this.store.unsnoozeSymbol(symbol);
-    this.broadcast('state', this.getPublicState());
-  }
-
-  markAlertReviewed(id, reviewed = true) {
-    this.store.markAlertReviewed(id, reviewed);
-    this.broadcast('state', this.getPublicState());
-  }
-
-  markAllAlertsReviewed() {
-    this.store.markAllAlertsReviewed();
-    this.broadcast('state', this.getPublicState());
-  }
-
-  async upsertTrackerPosition(payload) {
-    const sym = String(payload.symbol || '').trim().toUpperCase();
-    if (!sym) throw new Error('symbol is required');
-
-    // If we don't have shard detail for this symbol yet, fetch it
-    await this.getStockDetail(sym).catch(() => {});
-
-    const item = this.store.upsertTrackerItem({
-      symbol: sym,
-      mode: payload.mode || 'SELL_WATCH',
-      entryPrice: payload.entryPrice,
-      targetPrice: payload.targetPrice,
-      stopPrice: payload.stopPrice,
-      qty: payload.qty,
-      notes: payload.notes,
-    });
-
-    // Clear cooldowns for this symbol's tracker alerts so user gets immediate evaluation
-    this.signals.cooldowns.delete(`${sym}:TRACKER_SELL`);
-    this.signals.cooldowns.delete(`${sym}:TRACKER_BUY`);
-
-    this.recomputeTrackerState({ emitAlerts: true, manual: true });
-    this.broadcast('state', this.getPublicState());
-    return this.state.tracker.find(t => t.symbol === sym) || item;
-  }
-
-  async switchTrackerMode(symbol, mode, extra = {}) {
-    const sym = String(symbol || '').trim().toUpperCase();
-    await this.getStockDetail(sym).catch(() => {});
-    this.store.updateTrackerMode(sym, mode, extra);
-
-    this.signals.cooldowns.delete(`${sym}:TRACKER_SELL`);
-    this.signals.cooldowns.delete(`${sym}:TRACKER_BUY`);
-
-    this.recomputeTrackerState({ emitAlerts: true, manual: true });
-    this.broadcast('state', this.getPublicState());
-    return this.state.tracker.find(t => t.symbol === sym);
-  }
-
-  removeTrackerPosition(symbol) {
-    const sym = String(symbol || '').trim().toUpperCase();
-    this.store.removeTrackerItem(sym);
-    this.recomputeTrackerState({ emitAlerts: false });
-    this.broadcast('state', this.getPublicState());
   }
 
   updateConfig(partial) {
@@ -1147,42 +911,6 @@ class TredyeFlowService {
     }, intervalMs);
   }
 
-  async updateCredentials({ email, password, cookie, telegramBotToken, telegramChatId }) {
-    const envUpdates = {};
-    if (email !== undefined) envUpdates.TREDYE_EMAIL = String(email).trim();
-    if (password !== undefined && password !== '') envUpdates.TREDYE_PASSWORD = String(password);
-    if (cookie !== undefined) envUpdates.TREDYE_COOKIE = String(cookie).trim();
-    if (telegramBotToken !== undefined) envUpdates.TELEGRAM_BOT_TOKEN = String(telegramBotToken).trim();
-    if (telegramChatId !== undefined) envUpdates.TELEGRAM_CHAT_ID = String(telegramChatId).trim();
-
-    saveDotEnvKeyValues(envUpdates);
-    this.client.updateCredentials({ email, password, cookie });
-    this.demoMode = false;
-
-    let loginResult = { ok: true };
-    if (this.client.email && this.client.password) {
-      try {
-        loginResult = await this.client.login();
-      } catch (err) {
-        this.state.lastError = err.message;
-        this.state.authStatus = 'AUTH_ERROR';
-        this.broadcast('state', this.getPublicState());
-        return { ok: false, error: err.message };
-      }
-    }
-
-    while (this.isPolling) {
-      await new Promise(r => setTimeout(r, 150));
-    }
-    const pollRes = await this.runPollCycle({ manual: true });
-    return {
-      ok: pollRes.ok !== false,
-      error: pollRes.error || null,
-      loginResult,
-      state: this.getPublicState(),
-    };
-  }
-
   mergeUpstoxTicks(ticks = {}) {
     let updated = 0;
     for (const [sym, q] of Object.entries(ticks)) {
@@ -1217,7 +945,6 @@ class TredyeFlowService {
     this.state.topBull = ranked.topBull.map(({ stock, flow }) => this.enrichCardItem(stock, flow));
     this.state.topBear = ranked.topBear.map(({ stock, flow }) => this.enrichCardItem(stock, flow));
     this.state.allRanked = ranked.rankedStocks.map(({ stock, flow }) => this.enrichCardItem(stock, flow));
-    this.recomputeTrackerState({ emitAlerts: false });
     this.state.lastPollAt = Date.now();
   }
 
@@ -1292,50 +1019,6 @@ class TredyeFlowService {
     return this.upstox.getStatus();
   }
 
-  async sendTestNotification(symbol) {
-    const targetCard =
-      (symbol && this.state.allRanked.find(c => c.symbol === symbol.toUpperCase())) ||
-      this.state.topBull[0] ||
-      this.state.topBear[0];
-
-    const testAlert = targetCard
-      ? {
-          symbol: targetCard.symbol,
-          type: 'IN_ZONE',
-          priority: 'HIGH',
-          side: targetCard.side,
-          action: targetCard.side === 'BEAR' ? 'SELL' : 'BUY',
-          title: `🔔 Test Reminder: ${targetCard.symbol} — ${targetCard.side} Flow (${targetCard.agree}/${targetCard.totalChecks})`,
-          message: `${targetCard.symbol} at ₹${targetCard.ltp} · ${targetCard.referencePlan?.action || 'Order Block'} ${targetCard.referencePlan?.zoneText || ''}. Review setup on dashboard.`,
-          ltp: targetCard.ltp,
-          obBot: targetCard.primaryOB?.bot,
-          obTop: targetCard.primaryOB?.top,
-          obDistPct: targetCard.primaryOB?.distPct ?? 0,
-        }
-      : {
-          symbol: 'RELIANCE',
-          type: 'IN_ZONE',
-          priority: 'HIGH',
-          side: 'BULL',
-          action: 'BUY',
-          title: '🔔 Tredye Flow Alerts — Test Notification',
-          message: 'RELIANCE — strong BUY flow (5/5), price 0.18% above Bullish OB ₹2,915–2,923. Review it.',
-          ltp: 2928.4,
-          obBot: 2915,
-          obTop: 2923,
-          obDistPct: 0.18,
-        };
-
-    const res = await dispatchAlertNotification(testAlert, this.config, this.dashboardUrl);
-    this.broadcast('toast', {
-      title: testAlert.title,
-      message: testAlert.message,
-      symbol: testAlert.symbol,
-      side: testAlert.side,
-    });
-    return res;
-  }
-
   async start() {
     if (this.dryRun) {
       await this.runPollCycle({ forceDemo: !this.client.hasCredentials() });
@@ -1377,11 +1060,6 @@ class TredyeFlowService {
 
     // Continuous background poll loop (default 60s, configurable down to 15s)
     this.startPollLoop();
-
-    // 5s reminder check loop so scheduled reminders fire promptly
-    this.reminderTimer = setInterval(() => {
-      this.checkDueRemindersTick().catch(() => {});
-    }, 5000);
   }
 }
 
