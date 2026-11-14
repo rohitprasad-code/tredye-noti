@@ -126,6 +126,20 @@ function createDashboardServer(appController) {
     res.json(out);
   });
 
+  app.post(
+    '/api/upstox/token',
+    asyncHandler(async (req, res) => {
+      try {
+        const token = req.body?.token ?? req.body?.accessToken ?? '';
+        const out = await appController.saveUpstoxAccessToken(token);
+        res.json(out);
+      } catch (err) {
+        const status = Number.isInteger(err?.status) && err.status >= 400 ? err.status : 400;
+        res.status(status).json({ ok: false, error: err?.message || 'Failed to save Upstox token' });
+      }
+    })
+  );
+
   app.get('/api/upstox/login', (_req, res) => {
     try {
       const url = appController.upstox.getAuthUrl();

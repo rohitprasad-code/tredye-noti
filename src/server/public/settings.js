@@ -63,11 +63,11 @@
     }
   };
 
-  const syncAria = (el, announce = false) => {
+  const syncAria = (el, announce = false, forceInvalid = false) => {
     if (!el.matches?.('input, select, textarea')) return;
-    const isInvalid = supportsUserInvalid
-      ? el.matches(':user-invalid')
-      : el.classList.contains('user-invalid-fallback');
+    const isInvalid =
+      forceInvalid ||
+      (supportsUserInvalid ? el.matches(':user-invalid') : el.classList.contains('user-invalid-fallback'));
     if (isInvalid) {
       if (announce && !announced.has(el)) {
         announceError(el);
@@ -128,7 +128,7 @@
       'invalid',
       e => {
         announced.add(e.target);
-        syncAria(e.target, false);
+        syncAria(e.target, false, true);
       },
       true
     );
@@ -142,6 +142,146 @@
     el.textContent = text;
   };
 
+  const validateFormOrFocus = form => {
+    if (form.checkValidity()) return true;
+    const firstInvalid = form.querySelector(':invalid');
+    if (firstInvalid) {
+      updateFallbackClasses(firstInvalid, true);
+      syncAria(firstInvalid, false, true);
+      firstInvalid.focus();
+    }
+    return false;
+  };
+
+  const bindSecretToggle = (btnId, inputId, label) => {
+    const btn = document.getElementById(btnId);
+    const input = document.getElementById(inputId);
+    if (!btn || !input) return null;
+    const setVisible = visible => {
+      input.type = visible ? 'text' : 'password';
+      btn.setAttribute('aria-pressed', visible ? 'true' : 'false');
+      btn.setAttribute('aria-label', visible ? `Hide ${label}` : `Show ${label}`);
+      btn.textContent = visible ? 'Hide' : 'Show';
+    };
+    btn.addEventListener('click', () => setVisible(input.type !== 'text'));
+    return { input, reset: () => setVisible(false) };
+  };
+
+  const formatIstTimestamp = ms => {
+    if (!ms) return '';
+    try {
+      return new Date(ms).toLocaleString('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    } catch {
+      return '';
+    }
+  };
+
+  const renderUpstoxStatus = u => {
+    const section = document.getElementById('upstoxSection');
+    const badge = document.getElementById('upstoxStatusBadge');
+    const metaEl = document.getElementById('upstoxTokenMeta');
+    const keysPill = document.getElementById('oauthKeysSummaryPill');
+    const redirEl = document.getElementById('upstoxRedirectCode');
+    const tokenInput = document.getElementById('upstoxAnalyticsToken');
+    const keyInput = document.getElementById('upstoxApiKey');
+    const secretInput = document.getElementById('upstoxApiSecret');
+    const connectBtn = document.getElementById('upstoxConnectBtn');
+    const disBtn = document.getElementById('upstoxDisconnectBtn');
+
+    if (redirEl && u.redirectUri) redirEl.textContent = u.redirectUri;
+    if (keyInput && u.apiKeyPreview && u.hasApiKey) {
+      keyInput.placeholder = `Saved (${u.apiKeyPreview}) — leave blank to keep`;
+    }
+    if (secretInput && u.configured) {
+      secretInput.placeholder = 'Saved on server — leave blank to keep';
+    }
+    if (keysPill) {
+      keysPill.className = 'summary-pill' + (u.configured ? ' ok' : '');
+      keysPill.textContent = u.configured
+        ? `Keys saved${u.apiKeyPreview ? ' (' + u.apiKeyPreview + ')' : ''}`
+        : 'Not set';
+    }
+    if (connectBtn) {
+      connectBtn.textContent = u.configured ? 'Login Today with Saved Keys' : 'Save Keys & Login with Upstox';
+    }
+    if (tokenInput) {
+      const hasAnalyticsToken = Boolean(u.connected && u.tokenType === 'analytics');
+      tokenInput.placeholder = hasAnalyticsToken
+        ? 'Active 1-Year Analytics Token saved (paste a new one to replace)'
+        : 'Paste 1-Year Analytics Token';
+      tokenInput.required = !hasAnalyticsToken;
+      const reqStar = document.getElementById('analyticsReqStar');
+      if (reqStar) reqStar.hidden = hasAnalyticsToken;
+    }
+
+    if (section) section.classList.toggle('is-connected', Boolean(u.connected));
+
+    if (badge) {
+      let badgeCls = 'status-pill';
+      let badgeText = 'Not connected';
+      if (u.connected) {
+        badgeCls += ' ok';
+        if (u.tokenType === 'analytics') {
+          badgeText = `Connected · 1-Year Analytics Token${u.wsConnected ? ' · WS Live' : ''}`;
+        } else if (u.tokenType === 'daily_oauth') {
+          badgeText = `Connected · Daily OAuth${u.user?.userName ? ' · ' + u.user.userName : ''}${
+            u.wsConnected ? ' · WS Live' : ''
+          }`;
+        } else {
+          badgeText = `Connected${u.user?.userName ? ' · ' + u.user.userName : ''}${
+            u.wsConnected ? ' · WS Live' : ''
+          }`;
+        }
+      } else if (u.tokenExpired) {
+        badgeCls += ' err';
+        badgeText = 'Daily token expired · Paste 1-Year Token';
+      } else if (u.authFailed) {
+        badgeCls += ' err';
+        badgeText = 'Token rejected · Update Token';
+      } else if (u.configured) {
+        badgeCls += ' warn';
+        badgeText = 'API keys saved · Token needed';
+      }
+      badge.className = badgeCls;
+      badge.textContent = badgeText;
+    }
+
+    if (metaEl) {
+      let metaText =
+        'Use a 1-Year Analytics Token below so you never have to log in or enter keys daily.';
+      let isErr = false;
+      const expStr = formatIstTimestamp(u.expiresAt);
+      if (u.connected) {
+        if (u.tokenType === 'analytics') {
+          const daysTxt = u.expiresInDays !== null ? `${u.expiresInDays} days left` : 'Active';
+          metaText = `1-Year Analytics Token active · ${daysTxt}${expStr ? ` (expires ${expStr} IST)` : ''}. No daily login required.`;
+        } else if (expStr) {
+          metaText = `Daily OAuth session active · expires ${expStr} IST. Switch to an Analytics Token below to stop daily logins.`;
+        }
+      } else if (u.tokenExpired) {
+        isErr = true;
+        metaText = `Your daily Upstox token expired${expStr ? ` at ${expStr} IST` : ''}. Upstox OAuth tokens reset every day at 03:30 AM IST — paste a 1-Year Analytics Token below once to avoid daily login.`;
+      } else if (u.authFailed && u.lastError) {
+        isErr = true;
+        metaText = `Upstox rejected the active token: ${u.lastError}`;
+      } else if (u.configured) {
+        metaText =
+          'Your API Key & Secret are already saved on this server. Paste a 1-Year Analytics Token below for one-time setup, or open Daily OAuth Login to re-authorize with saved keys.';
+      }
+      metaEl.className = 'help-text' + (isErr ? ' is-err' : '');
+      metaEl.textContent = metaText;
+    }
+
+    if (disBtn) disBtn.hidden = !(u.connected || u.hasToken);
+  };
+
   const refreshState = async () => {
     try {
       const res = await fetch('/api/state', { cache: 'no-store' });
@@ -149,32 +289,7 @@
       const st = await res.json();
       const u = st.upstox || {};
       upstoxSaved = Boolean(u.hasApiKey && u.configured);
-
-      const section = document.getElementById('upstoxSection');
-      const badge = document.getElementById('upstoxStatusBadge');
-      const redirEl = document.getElementById('upstoxRedirectCode');
-      const keyInput = document.getElementById('upstoxApiKey');
-      const secretInput = document.getElementById('upstoxApiSecret');
-      const disBtn = document.getElementById('upstoxDisconnectBtn');
-
-      if (redirEl && u.redirectUri) redirEl.textContent = u.redirectUri;
-      if (keyInput && u.apiKeyPreview && u.hasApiKey) {
-        keyInput.placeholder = `Saved (${u.apiKeyPreview})`;
-      }
-      if (secretInput && u.configured) {
-        secretInput.placeholder = 'Saved (paste to update)';
-      }
-
-      if (section) section.classList.toggle('is-connected', Boolean(u.connected));
-      if (badge) {
-        badge.className = 'status-pill' + (u.connected ? ' ok' : u.configured ? ' warn' : '');
-        badge.textContent = u.connected
-          ? `Connected${u.user?.userName ? ' · ' + u.user.userName : ''}${u.wsConnected ? ' · WS Live' : ''}`
-          : u.configured
-          ? 'Keys saved · Login required'
-          : 'Not connected';
-      }
-      if (disBtn) disBtn.hidden = !u.connected;
+      renderUpstoxStatus(u);
 
       const cfg = st.config || {};
       const setVal = (id, val) => {
@@ -213,15 +328,56 @@
     });
   }
 
-  const toggleSecretBtn = document.getElementById('toggleSecretBtn');
-  const secretInput = document.getElementById('upstoxApiSecret');
-  if (toggleSecretBtn && secretInput) {
-    toggleSecretBtn.addEventListener('click', () => {
-      const showing = secretInput.type === 'text';
-      secretInput.type = showing ? 'password' : 'text';
-      toggleSecretBtn.setAttribute('aria-pressed', showing ? 'false' : 'true');
-      toggleSecretBtn.setAttribute('aria-label', showing ? 'Show API Secret' : 'Hide API Secret');
-      toggleSecretBtn.textContent = showing ? 'Show' : 'Hide';
+  const analyticsToggle = bindSecretToggle('toggleAnalyticsBtn', 'upstoxAnalyticsToken', 'Analytics Token');
+  const secretToggle = bindSecretToggle('toggleSecretBtn', 'upstoxApiSecret', 'API Secret');
+  const analyticsInput = analyticsToggle?.input || document.getElementById('upstoxAnalyticsToken');
+  const secretInput = secretToggle?.input || document.getElementById('upstoxApiSecret');
+
+  const tokenForm = document.getElementById('upstoxTokenForm');
+  const tokenStatus = document.getElementById('upstoxTokenStatusMsg');
+  const saveTokenBtn = document.getElementById('upstoxSaveTokenBtn');
+  const resetTokenControl = stillConnected => {
+    if (!tokenForm || !analyticsInput) return;
+    analyticsInput.required = !stillConnected;
+    tokenForm.reset();
+    analyticsToggle?.reset();
+    dirtyState.delete(analyticsInput);
+    updateFallbackClasses(analyticsInput, false);
+    syncAria(analyticsInput, false);
+  };
+
+  if (tokenForm && analyticsInput) {
+    tokenForm.addEventListener('submit', async e => {
+      e.preventDefault();
+      analyticsInput.required = true;
+      if (!validateFormOrFocus(tokenForm)) return;
+
+      if (saveTokenBtn) saveTokenBtn.disabled = true;
+      setFormStatus(tokenStatus, 'Verifying token with Upstox…');
+      try {
+        const res = await fetch('/api/upstox/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({ token: analyticsInput.value.trim() }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.ok) {
+          setFormStatus(tokenStatus, data.error || 'Token verification failed.', 'err');
+          return;
+        }
+        resetTokenControl(Boolean(data.status?.connected));
+        const days = data.status?.expiresInDays;
+        const msg =
+          days !== null && days !== undefined
+            ? `Token verified & saved (${days} days remaining). Live quotes & WebSocket starting.`
+            : 'Upstox token verified & saved. Live quotes & WebSocket starting.';
+        setFormStatus(tokenStatus, msg, 'ok');
+        refreshState();
+      } catch {
+        setFormStatus(tokenStatus, 'Network error contacting Upstox token verification endpoint.', 'err');
+      } finally {
+        if (saveTokenBtn) saveTokenBtn.disabled = false;
+      }
     });
   }
 
@@ -239,15 +395,7 @@
       if (keyInput) keyInput.required = needKeys && (!upstoxSaved || Boolean(apiSecret));
       if (secretInput) secretInput.required = needKeys && (!upstoxSaved || Boolean(apiKey));
 
-      if (!upstoxForm.checkValidity()) {
-        const firstInvalid = upstoxForm.querySelector(':invalid');
-        if (firstInvalid) {
-          updateFallbackClasses(firstInvalid, true);
-          syncAria(firstInvalid, false);
-          firstInvalid.focus();
-        }
-        return;
-      }
+      if (!validateFormOrFocus(upstoxForm)) return;
 
       const redirectUri =
         document.getElementById('upstoxRedirectCode')?.textContent?.trim() ||
@@ -283,7 +431,9 @@
   if (disBtn) {
     disBtn.addEventListener('click', async () => {
       await fetch('/api/upstox/disconnect', { method: 'POST' });
-      setFormStatus(upstoxStatus, 'Upstox disconnected.', 'ok');
+      resetTokenControl(false);
+      setFormStatus(tokenStatus, 'Upstox token cleared.', 'ok');
+      setFormStatus(upstoxStatus, '');
       refreshState();
     });
   }
@@ -294,15 +444,7 @@
   if (rulesForm) {
     rulesForm.addEventListener('submit', async e => {
       e.preventDefault();
-      if (!rulesForm.checkValidity()) {
-        const firstInvalid = rulesForm.querySelector(':invalid');
-        if (firstInvalid) {
-          updateFallbackClasses(firstInvalid, true);
-          syncAria(firstInvalid, false);
-          firstInvalid.focus();
-        }
-        return;
-      }
+      if (!validateFormOrFocus(rulesForm)) return;
 
       const splitList = str =>
         String(str || '')

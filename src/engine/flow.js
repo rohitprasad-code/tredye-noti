@@ -44,9 +44,11 @@ function evaluateConfluence(stock) {
   const checks = [
     { key: 'vwap', label: 'LTP > VWAP', bull: stock.ltp > stock.vwap },
     { key: 'poc', label: 'LTP > POC', bull: stock.ltp > stock.poc },
-    { key: 'buy_pct', label: 'Buy% > 50', bull: stock.buy_pct > 50 },
     { key: 'cvd', label: 'CVD > 0', bull: stock.cvd > 0 },
   ];
+  if (typeof stock.buy_pct === 'number' && Number.isFinite(stock.buy_pct)) {
+    checks.splice(2, 0, { key: 'buy_pct', label: 'Buy% > 50', bull: stock.buy_pct > 50 });
+  }
 
   const imb = getDepthImbalance(stock);
   if (imb !== null) {
@@ -277,7 +279,7 @@ function scoreAndRankUniverse(stocks = [], options = {}) {
 
   const rankedStocks = stocks
     .map(s => ({ stock: s, flow: bySymbol[s.symbol] }))
-    .sort((a, b) => (b.flow.score - a.flow.score) || ((b.stock.chg_pct ?? 0) - (a.stock.chg_pct ?? 0)));
+    .sort((a, b) => (b.flow.score - a.flow.score) || (b.flow.strengthScore - a.flow.strengthScore) || ((b.stock.chg_pct ?? 0) - (a.stock.chg_pct ?? 0)));
 
   return {
     bySymbol,

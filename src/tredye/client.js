@@ -8,6 +8,10 @@ const DATA_BASE_URL = 'https://data.tredye.com/data';
 const USER_AGENT =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36';
 
+function normalizeBuildup(bu) {
+  return bu ? String(bu).trim().toUpperCase().replace(/\bBUILDUP$/, 'BUILD-UP') : null;
+}
+
 class TredyeClient {
   constructor(options = {}) {
     this.baseUrl = options.baseUrl || BASE_URL;
@@ -236,7 +240,14 @@ class TredyeClient {
   loadCachedSnapshot() {
     try {
       if (fs.existsSync(this.snapshotFile)) {
-        return JSON.parse(fs.readFileSync(this.snapshotFile, 'utf8'));
+        const snap = JSON.parse(fs.readFileSync(this.snapshotFile, 'utf8'));
+        if (Array.isArray(snap?.orderflow?.stocks)) {
+          snap.orderflow.stocks = snap.orderflow.stocks.map(s => ({
+            ...s,
+            buildup: normalizeBuildup(s.buildup || s.bu),
+          }));
+        }
+        return snap;
       }
     } catch {
       // ignore
@@ -268,7 +279,7 @@ class TredyeClient {
             ...s,
             sector: f?.g || s.sector || 'Other',
             flowScore: f?.f ?? (s.buy_pct - 50) * (s.tv || 1),
-            buildup: f?.bu || null,
+            buildup: normalizeBuildup(f?.bu),
             doi: f?.doi ?? null,
             rv: f?.rv ?? null,
           };

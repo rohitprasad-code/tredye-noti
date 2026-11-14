@@ -10,6 +10,49 @@ const UPSTOX_API_BASE = 'https://api.upstox.com';
 const INSTRUMENTS_NSE_URL = 'https://assets.upstox.com/market-quote/instruments/exchange/NSE.json.gz';
 const PROTO_PATH = path.join(__dirname, 'MarketDataFeedV3.proto');
 const IST_OFFSET_MS = 5.5 * 3600 * 1000;
+const ANALYTICS_MIN_SPAN_MS = 30 * 86400 * 1000;
+const TOKEN_VERIFY_KEY = 'NSE_EQ|INE002A01018';
+
+/**
+ * Strips an optional leading "Bearer " prefix and surrounding whitespace from an API token.
+ */
+function normalizeBearerToken(raw) {
+  return String(raw || '')
+    .trim()
+    .replace(/^Bearer\s+/i, '')
+    .trim();
+}
+
+/**
+ * Decodes unverified JWT payload claims (exp, iat, sub) for local lifetime detection.
+ */
+function decodeJwtClaims(token) {
+  const clean = normalizeBearerToken(token);
+  const parts = clean.split('.');
+  if (parts.length !== 3 || !parts[1]) return null;
+  try {
+    const normalizedB64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padLen = (4 - (normalizedB64.length % 4)) % 4;
+    const jsonStr = Buffer.from(normalizedB64 + '='.repeat(padLen), 'base64').toString('utf8');
+    const payload = JSON.parse(jsonStr);
+    if (!payload || typeof payload !== 'object') return null;
+    const expNum = Number(payload.exp);
+    const iatNum = Number(payload.iat);
+    return {
+      expMs: Number.isFinite(expNum) && expNum > 0 ? expNum * 1000 : null,
+      iatMs: Number.isFinite(iatNum) && iatNum > 0 ? iatNum * 1000 : null,
+      sub: payload.sub ? String(payload.sub) : '',
+      payload,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function isJwtExpired(token) {
+  const claims = decodeJwtClaims(token);
+  return Boolean(claims?.expMs && Date.now() >= claims.expMs);
+}
 
 function istDateStr(tsOrIso) {
   const num = typeof tsOrIso === 'string' && !/^\d+$/.test(tsOrIso.trim())
@@ -32,18 +75,28 @@ function computeOrderBookStats(tbq, tsq) {
 
 class UpstoxClient {
   constructor(options = {}) {
-    this.apiKey = (options.apiKey || process.env.UPSTOX_API_KEY || '').trim();
-    this.apiSecret = (options.apiSecret || process.env.UPSTOX_API_SECRET || '').trim();
+    this.apiKey = (options.apiKey !== undefined ? options.apiKey : process.env.UPSTOX_API_KEY || '').trim();
+    this.apiSecret = (
+      options.apiSecret !== undefined ? options.apiSecret : process.env.UPSTOX_API_SECRET || ''
+    ).trim();
     this.redirectUri = (
-      options.redirectUri ||
-      process.env.UPSTOX_REDIRECT_URI ||
-      `http://localhost:${process.env.PORT || 4600}/api/upstox/callback`
+      options.redirectUri !== undefined
+        ? options.redirectUri
+        : process.env.UPSTOX_REDIRECT_URI || `http://localhost:${process.env.PORT || 4600}/api/upstox/callback`
     ).trim();
     this.tokenFile = options.tokenFile || path.join(process.cwd(), 'data', 'upstox-token.json');
     this.instrumentsFile =
       options.instrumentsFile || path.join(process.cwd(), 'data', 'upstox-instruments-map.json');
 
-    this.accessToken = (options.accessToken || process.env.UPSTOX_ACCESS_TOKEN || '').trim();
+    this.accessToken = normalizeBearerToken(
+      options.accessToken !== undefined ? options.accessToken : process.env.UPSTOX_ACCESS_TOKEN || ''
+    );
+    this.extendedToken = normalizeBearerToken(
+      options.extendedToken !== undefined ? options.extendedToken : process.env.UPSTOX_EXTENDED_TOKEN || ''
+    );
+    this.extendedTokenBlocked = false;
+    this.tokenSource = options.tokenSource || '';
+    this.authFailed = false;
     this.userProfile = null;
     this.issuedAt = 0;
 
@@ -72,11 +125,20 @@ class UpstoxClient {
     try {
       if (!fs.existsSync(this.tokenFile)) return;
       const raw = JSON.parse(fs.readFileSync(this.tokenFile, 'utf8'));
-      if (raw?.accessToken && !this.accessToken) {
-        this.accessToken = String(raw.accessToken).trim();
+      const rawAccess = normalizeBearerToken(raw?.accessToken || '');
+      const hadToken = Boolean(this.accessToken);
+      if (rawAccess && !hadToken) {
+        this.accessToken = rawAccess;
       }
-      if (raw?.userProfile) this.userProfile = raw.userProfile;
-      if (raw?.issuedAt) this.issuedAt = Number(raw.issuedAt);
+      if (!this.extendedToken && raw?.extendedToken) {
+        this.extendedToken = normalizeBearerToken(raw.extendedToken);
+      }
+      const sameToken = !hadToken || (rawAccess && rawAccess === this.accessToken);
+      if (sameToken) {
+        if (raw?.tokenSource) this.tokenSource = String(raw.tokenSource);
+        if (raw?.userProfile) this.userProfile = raw.userProfile;
+        if (raw?.issuedAt) this.issuedAt = Number(raw.issuedAt);
+      }
     } catch {
       // ignore corrupted cache
     }
@@ -90,6 +152,8 @@ class UpstoxClient {
         JSON.stringify(
           {
             accessToken: this.accessToken,
+            extendedToken: this.extendedToken || undefined,
+            tokenSource: this.tokenSource || undefined,
             userProfile: this.userProfile,
             issuedAt: this.issuedAt,
           },
@@ -105,6 +169,10 @@ class UpstoxClient {
 
   clearToken() {
     this.accessToken = '';
+    this.extendedToken = '';
+    this.extendedTokenBlocked = false;
+    this.tokenSource = '';
+    this.authFailed = false;
     this.userProfile = null;
     this.issuedAt = 0;
     this.lastError = null;
@@ -116,17 +184,36 @@ class UpstoxClient {
     }
   }
 
-  updateConfig({ apiKey, apiSecret, redirectUri, accessToken }) {
+  updateConfig({ apiKey, apiSecret, redirectUri, accessToken, extendedToken, tokenSource }) {
     if (apiKey !== undefined) this.apiKey = String(apiKey).trim();
     if (apiSecret !== undefined && apiSecret !== '') this.apiSecret = String(apiSecret).trim();
     if (redirectUri !== undefined && redirectUri.trim()) {
       this.redirectUri = redirectUri.trim();
     }
-    if (accessToken !== undefined && accessToken.trim()) {
-      this.accessToken = accessToken.trim();
+    let tokenChanged = false;
+    const cleanToken = accessToken !== undefined ? normalizeBearerToken(accessToken) : '';
+    if (cleanToken) {
+      this.accessToken = cleanToken;
+      this.tokenSource = '';
+      this.authFailed = false;
+      this.extendedTokenBlocked = false;
       this.issuedAt = Date.now();
-      this.saveToken();
+      const detectedType = this.getTokenInfo().tokenType;
+      this.tokenSource =
+        tokenSource ||
+        (detectedType === 'analytics' ? 'analytics' : detectedType === 'daily_oauth' ? 'oauth' : 'manual');
+      if (extendedToken === undefined) {
+        this.extendedToken = '';
+        this.userProfile = null;
+      }
+      tokenChanged = true;
     }
+    if (extendedToken !== undefined) {
+      this.extendedToken = normalizeBearerToken(extendedToken);
+      this.extendedTokenBlocked = false;
+      tokenChanged = true;
+    }
+    if (tokenChanged) this.saveToken();
     this.lastError = null;
   }
 
@@ -134,11 +221,62 @@ class UpstoxClient {
     return Boolean(this.apiKey && this.apiSecret && this.redirectUri);
   }
 
+  /**
+   * Inspects the active access token without assuming JWT format for manual/test strings.
+   */
+  getTokenInfo() {
+    const token = normalizeBearerToken(this.accessToken);
+    if (!token) {
+      return {
+        hasToken: false,
+        expired: false,
+        authFailed: false,
+        tokenType: 'none',
+        expiresAt: null,
+        expiresInHours: null,
+        expiresInDays: null,
+      };
+    }
+
+    const claims = decodeJwtClaims(token);
+    const expMs = claims?.expMs || null;
+    const iatMs = claims?.iatMs || null;
+    const now = Date.now();
+    const expired = expMs !== null ? now >= expMs : false;
+    const remainingMs = expMs !== null ? Math.max(0, expMs - now) : null;
+    const spanMs = expMs !== null && iatMs !== null ? expMs - iatMs : null;
+
+    let tokenType = 'manual';
+    if (spanMs !== null && spanMs >= ANALYTICS_MIN_SPAN_MS) {
+      tokenType = 'analytics';
+    } else if (this.tokenSource === 'analytics') {
+      tokenType = 'analytics';
+    } else if (expMs !== null) {
+      tokenType = 'daily_oauth';
+    }
+
+    return {
+      hasToken: true,
+      expired,
+      authFailed: Boolean(this.authFailed),
+      tokenType,
+      expiresAt: expMs,
+      expiresInHours: remainingMs !== null ? Number((remainingMs / 3600000).toFixed(1)) : null,
+      expiresInDays: remainingMs !== null ? Math.floor(remainingMs / 86400000) : null,
+    };
+  }
+
+  isTokenExpired() {
+    return this.getTokenInfo().expired;
+  }
+
   isConnected() {
-    return Boolean(this.accessToken);
+    const info = this.getTokenInfo();
+    return info.hasToken && !info.expired && !info.authFailed;
   }
 
   getStatus() {
+    const tokenInfo = this.getTokenInfo();
     return {
       configured: this.isConfigured(),
       hasApiKey: Boolean(this.apiKey),
@@ -146,6 +284,14 @@ class UpstoxClient {
       apiKeyPreview: this.apiKey ? `${this.apiKey.slice(0, 6)}…${this.apiKey.slice(-4)}` : '',
       redirectUri: this.redirectUri,
       connected: this.isConnected(),
+      hasToken: tokenInfo.hasToken,
+      tokenType: tokenInfo.tokenType,
+      tokenExpired: tokenInfo.expired,
+      authFailed: tokenInfo.authFailed,
+      expiresAt: tokenInfo.expiresAt,
+      expiresInHours: tokenInfo.expiresInHours,
+      expiresInDays: tokenInfo.expiresInDays,
+      hasExtendedToken: Boolean(this.extendedToken && !this.extendedTokenBlocked),
       user: this.userProfile
         ? {
             userId: this.userProfile.user_id || '',
@@ -205,7 +351,11 @@ class UpstoxClient {
       throw new Error(msg);
     }
 
-    this.accessToken = json.access_token;
+    this.accessToken = normalizeBearerToken(json.access_token);
+    this.extendedToken = normalizeBearerToken(json.extended_token || '');
+    this.extendedTokenBlocked = false;
+    this.tokenSource = 'oauth';
+    this.authFailed = false;
     this.issuedAt = Date.now();
     this.userProfile = {
       user_id: json.user_id || '',
@@ -218,38 +368,143 @@ class UpstoxClient {
     return this.userProfile;
   }
 
+  async _fetchJson(endpointPath, token) {
+    const res = await fetch(`${UPSTOX_API_BASE}${endpointPath}`, {
+      headers: {
+        Accept: 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    const json = await res.json().catch(() => ({}));
+    return { res, json };
+  }
+
+  _extractErrorMessage(json, fallback) {
+    return json?.errors?.[0]?.message || json?.message || fallback;
+  }
+
+  _hasExtendedAuthRestriction(json, status) {
+    const code = String(json?.errors?.[0]?.errorCode || json?.errors?.[0]?.code || '');
+    return status === 401 || status === 403 || code === 'UDAPI100067';
+  }
+
+  _canUseExtendedFallback() {
+    return Boolean(
+      this.extendedToken &&
+        !this.extendedTokenBlocked &&
+        !isJwtExpired(this.extendedToken) &&
+        this.extendedToken !== this.accessToken
+    );
+  }
+
+  async _tryExtendedFallback(endpointPath) {
+    if (!this._canUseExtendedFallback()) return null;
+    const { res, json } = await this._fetchJson(endpointPath, this.extendedToken);
+    if (res.ok) {
+      this.accessToken = this.extendedToken;
+      this.tokenSource = 'extended';
+      this.authFailed = false;
+      this.lastError = null;
+      this.saveToken();
+      return json;
+    }
+    if (this._hasExtendedAuthRestriction(json, res.status)) {
+      this.extendedTokenBlocked = true;
+    }
+    return null;
+  }
+
+  /**
+   * Validates a manually pasted Upstox token (e.g. 1-Year Analytics Token) against a read-only
+   * market-quote endpoint, which works without requiring a Static IP whitelist.
+   */
+  async verifyAccessToken(rawToken) {
+    const token = normalizeBearerToken(rawToken);
+    if (!token) {
+      const err = new Error('Upstox token is required');
+      err.status = 400;
+      throw err;
+    }
+
+    const claims = decodeJwtClaims(token);
+    if (claims?.expMs && Date.now() >= claims.expMs) {
+      const err = new Error(
+        `This Upstox token expired on ${new Date(claims.expMs).toLocaleString('en-IN', {
+          timeZone: 'Asia/Kolkata',
+        })} IST.`
+      );
+      err.status = 400;
+      throw err;
+    }
+
+    const { res, json } = await this._fetchJson(
+      `/v2/market-quote/quotes?instrument_key=${encodeURIComponent(TOKEN_VERIFY_KEY)}`,
+      token
+    );
+    if (!res.ok) {
+      const msg = this._extractErrorMessage(
+        json,
+        res.status === 401 || res.status === 403
+          ? 'Invalid or expired Upstox token.'
+          : `Upstox verification failed (HTTP ${res.status})`
+      );
+      const err = new Error(msg);
+      err.status = res.status === 401 || res.status === 403 ? 401 : res.status || 502;
+      throw err;
+    }
+
+    return { ok: true, token, claims };
+  }
+
   async apiRequest(endpointPath) {
     if (!this.accessToken) {
-      const err = new Error('Upstox access token is missing. Please log in with Upstox.');
+      const err = new Error(
+        'Upstox access token is missing. Paste a 1-Year Analytics Token or log in with Upstox.'
+      );
       err.status = 401;
       throw err;
     }
 
-    const res = await fetch(`${UPSTOX_API_BASE}${endpointPath}`, {
-      headers: {
-        Accept: 'application/json',
-        Authorization: `Bearer ${this.accessToken}`,
-      },
-    });
+    if (this.isTokenExpired()) {
+      const promoted = await this._tryExtendedFallback(endpointPath);
+      if (promoted) return promoted;
 
-    const json = await res.json().catch(() => ({}));
-    if (res.status === 401) {
       const err = new Error(
-        json?.errors?.[0]?.message || 'Upstox token expired for today — please reconnect via Upstox OAuth.'
+        'Upstox daily token expired — paste a 1-Year Analytics Token in Settings or log in again today.'
       );
       err.status = 401;
+      this.authFailed = true;
+      this.lastError = err.message;
+      this.wsConnected = false;
+      throw err;
+    }
+
+    const { res, json } = await this._fetchJson(endpointPath, this.accessToken);
+    if (res.status === 401) {
+      const promoted = await this._tryExtendedFallback(endpointPath);
+      if (promoted) return promoted;
+
+      const err = new Error(
+        this._extractErrorMessage(
+          json,
+          'Upstox token expired or rejected — paste a 1-Year Analytics Token or reconnect via Upstox OAuth.'
+        )
+      );
+      err.status = 401;
+      this.authFailed = true;
       this.lastError = err.message;
       this.wsConnected = false;
       throw err;
     }
     if (!res.ok) {
-      const err = new Error(
-        json?.errors?.[0]?.message || json?.message || `Upstox API HTTP ${res.status}`
-      );
+      const err = new Error(this._extractErrorMessage(json, `Upstox API HTTP ${res.status}`));
       err.status = res.status;
       this.lastError = err.message;
       throw err;
     }
+
+    this.authFailed = false;
+    this.lastError = null;
     return json;
   }
 
@@ -705,4 +960,4 @@ class UpstoxClient {
   }
 }
 
-module.exports = { UpstoxClient };
+module.exports = { UpstoxClient, normalizeBearerToken, decodeJwtClaims };

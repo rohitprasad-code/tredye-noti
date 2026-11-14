@@ -2919,13 +2919,9 @@ function buildModel(D) {
   const sideMode = (D.meta && D.meta.filter && D.meta.filter.side) || (window.OBF_FEED && window.OBF_FEED.filter && window.OBF_FEED.filter.side) || "ALL";
   let rawList = D.stocks.map(s => Object.assign({}, s));
   if (sideMode === "BULL") {
-    const onlyBulls = rawList.filter(s => s.g === "bull");
-    const anchorBear = rawList.find(s => s.g === "bear") || { s: "_ANCHOR_BEAR", n: "Anchor", sec: "OTHER", g: "bear", c: -0.08, cp: -0.5, p: 0.001, o: 100, l: 99.92, top: false, fo: true, w: 0.5, _anchor: true };
-    rawList = onlyBulls.concat([Object.assign({}, anchorBear, { top: false, c: -0.08, p: 0.001, _anchor: true })]);
+    rawList = rawList.filter(s => s.g === "bull");
   } else if (sideMode === "BEAR") {
-    const onlyBears = rawList.filter(s => s.g === "bear");
-    const anchorBull = rawList.find(s => s.g === "bull") || { s: "_ANCHOR_BULL", n: "Anchor", sec: "OTHER", g: "bull", c: 0.08, cp: 0.5, p: 0.999, o: 100, l: 100.08, top: false, fo: true, w: 0.5, _anchor: true };
-    rawList = [Object.assign({}, anchorBull, { top: false, c: 0.08, p: 0.999, _anchor: true })].concat(onlyBears);
+    rawList = rawList.filter(s => s.g === "bear");
   }
   const stocks = rawList;
   M.sideMode = sideMode;
@@ -3195,12 +3191,13 @@ function buildModel(D) {
   stocks.forEach(s => {
     const r = rng(s.s, 'oi');
     const rb = r();
+    if (s.bu) s.bu = String(s.bu).trim().toUpperCase().replace(/\bBUILDUP$/, 'BUILD-UP');
     if (!s.bu) { if (s.side > 0) s.bu = rb < .70 ? 'LONG BUILD-UP' : 'SHORT COVERING'; else s.bu = rb < .70 ? 'SHORT BUILD-UP' : 'LONG UNWINDING'; }
     const mag = 3 + 11 * Math.min(1, Math.abs(s.c) / 3.5) + 4 * (r() - .5);
     s._oiMag = mag;
     s.delta = Math.sign(s.c) * s.w * 12000 * (0.5 + Math.abs(s.c));
   });
-  const setOI = s => { s.oi = (s.bu === 'LONG BUILD-UP' || s.bu === 'SHORT BUILD-UP') ? s._oiMag : -s._oiMag; };
+  const setOI = s => { s.oi = (s.bu === 'LONG BUILD-UP' || s.bu === 'SHORT BUILD-UP' || s.bu === 'LONG BUILDUP' || s.bu === 'SHORT BUILDUP') ? s._oiMag : -s._oiMag; };
   stocks.forEach(setOI);
 
   /* ---- picks (rule: top-3 by rank, no events, max 2 per sector) ---- */
@@ -3220,8 +3217,8 @@ function buildModel(D) {
     L.oppLo = sd > 0 ? L.T2 + 0.1 * s.ATR : L.T2 - 0.45 * s.ATR; L.oppHi = sd > 0 ? L.T2 + 0.45 * s.ATR : L.T2 - 0.1 * s.ATR;
     L.rr = Math.abs(L.T2 - L.E) / L.R;
   });
-  M.buyPicks.forEach((s, i) => { s.pick = i + 1; s.bu = 'LONG BUILD-UP'; setOI(s); });
-  M.sellPicks.forEach((s, i) => { s.pick = i + 1; s.bu = 'SHORT BUILD-UP'; setOI(s); });
+  M.buyPicks.forEach((s, i) => { s.pick = i + 1; if (!s.bu) s.bu = 'LONG BUILD-UP'; setOI(s); });
+  M.sellPicks.forEach((s, i) => { s.pick = i + 1; if (!s.bu) s.bu = 'SHORT BUILD-UP'; setOI(s); });
   stocks.forEach(s => {
     const sec = secMap[s.sec]; const sc = sec ? sec.chg : 0;
     s.secChg = sc;
@@ -3229,7 +3226,7 @@ function buildModel(D) {
       ? Array.from({ length: 5 }, (_, i) => i < s.flowAgree)
       : [
           Math.abs(2 * s.p - 1) >= 0.9,
-          s.side > 0 ? s.bu === 'LONG BUILD-UP' : s.bu === 'SHORT BUILD-UP',
+          s.side > 0 ? (s.bu === 'LONG BUILD-UP' || s.bu === 'LONG BUILDUP') : (s.bu === 'SHORT BUILD-UP' || s.bu === 'SHORT BUILDUP'),
           s.vwapHold,
           Math.sign(sc) === s.side || Math.abs(s.c - sc) >= 1.5,
           s.w >= 0.9 || s.volTot >= q1,
@@ -3242,7 +3239,7 @@ function buildModel(D) {
     const rest = sel.filter(s => !picks.includes(s));
     const c2 = rest.slice(0, 4), c3 = rest.slice(4, 9), c4 = rest.slice(9);
     const c1 = picks.slice();
-    if (!isBull) { const ev = list.filter(s => s.sel && s.event); c1.push(...ev); }
+    if (!isBull) { const ev = list.filter(s => s.sel && s.event).slice(0, 1); c1.push(...ev); }
     return { c1, c2, c3, c4 };
   };
   M.mos = { bull: colsFor(bulls, M.buyPicks, true), bear: colsFor(bears, M.sellPicks, false) };
@@ -4884,7 +4881,8 @@ function buildTicket(M, TK, parent, mode) {
   const kk = (stack ? 1 : S.s) * S.dpr;
   const d = el('div', `ticket ${side > 0 ? 'buy' : 'sell'} p${TK.pick}${big ? ' hero' : compact ? ' compact' : ' std'}`, parent);
   d.dataset.k = s.s; if (!s._anchor) d.title = `${s.s} · Click to copy code · ⌘+Click to open Upstox`;
-  if (!stack && s.s === M.buyPicks[0].s) d.setAttribute('data-hover-demo', '1');
+  const demoPick = M.buyPicks[0] || M.sellPicks[0];
+  if (!stack && demoPick && s.s === demoPick.s) d.setAttribute('data-hover-demo', '1');
   d.style.setProperty('--sc', rgb); d.style.setProperty('--hi', SCHI[side]); d.style.setProperty('--hot', SCHOT[side]);
   TK.el = d;
   el('div', 'gb', d);
@@ -5315,9 +5313,21 @@ function finalState() {
 /* the build show plays untouched (user request): while it runs the hover is held, because brush mode outranks the
    build's hidden states (every tile and card the build has not reached showed through, and the stock's chain and popup
    drew ahead of the replay). When the show ends, the stock under the resting pointer lights up. */
+function obStageTargetAt(st, p) {
+  if (!st || !p || typeof document.elementFromPoint !== 'function') return null;
+  let t = document.elementFromPoint(p[0], p[1]);
+  const toast = t && t.closest ? t.closest('.ob-toast') : null;
+  if (toast) {
+    const prevPe = toast.style.pointerEvents;
+    toast.style.pointerEvents = 'none';
+    t = document.elementFromPoint(p[0], p[1]);
+    toast.style.pointerEvents = prevPe;
+  }
+  return t && st.contains(t) ? t : null;
+}
 function obHoverAfterShow() {
   const p = FX.ptr; if (!p || S.stacked) return;
-  const t = document.elementFromPoint(p[0], p[1]); if (!t || !$('#stage').contains(t)) return;
+  const t = obStageTargetAt($('#stage'), p); if (!t) return;
   t.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: p[0], clientY: p[1] }));
 }
 function settleShow() { if (FX.show) { FX.show = false; } finalState(); }
@@ -5428,9 +5438,12 @@ function showUpdate(now) {
 
 /* ================= interaction: linked brushing, inspector, keys ================= */
 function toStage(e) { const st = $('#stage'); const r = st.getBoundingClientRect(); return [(e.clientX - r.left) / S.s, (e.clientY - r.top) / S.s]; }
-function clearLit() { const st = $('#stage'); st.classList.remove('brush'); st.querySelectorAll('.lit,.hot').forEach(e => e.classList.remove('lit', 'hot')); }
-function setBrush(h, e) {
+function clearLit(opts) {
   const st = $('#stage');
+  if (!(opts && opts.keepBrushClass)) st.classList.remove('brush');
+  st.querySelectorAll('.lit,.hot').forEach(e => e.classList.remove('lit', 'hot'));
+}
+function setBrush(h, e) {
   const same = FX.hover && h && FX.hover.kind === h.kind && FX.hover.sym === h.sym && FX.hover.sec === h.sec && FX.hover.idx === h.idx;
   if (same) {
     if (e) placeInspector(e);
@@ -5440,20 +5453,38 @@ function setBrush(h, e) {
   if (FX.pinned) return;
   applyBrush(h, e);
 }
-function applyBrush(h, e) {
-  const st = $('#stage'); clearLit(); hideInspector(); obPulseMark(h);
-  if (!h) { drawLens(M, G, $('#ladderWrap'), null); return; }
-  st.classList.add('brush');
+function applyBrush(h, e, opts) {
+  const st = $('#stage'), i = $('#inspector');
+  const nextSym = h && h.kind === 'stock' && M && M.bySym && M.bySym[h.sym] ? h.sym : null;
+  const keepIns = !!(opts && opts.preserveInspector && nextSym && e && i && i.classList.contains('on') && i._sym === nextSym && i._at);
+  const savedAt = keepIns ? i._at : null;
+  clearLit(opts);
+  if (!keepIns) hideInspector();
+  obPulseMark(h);
+  if (!h) {
+    clearLit(); hideInspector(); drawLens(M, G, $('#ladderWrap'), null);
+    return;
+  }
   if (h.kind === 'stock') {
-    const s = M.bySym[h.sym];
+    const s = M && M.bySym ? M.bySym[h.sym] : null;
+    if (!s) {
+      clearLit(); hideInspector(); obPulseMark(null); drawLens(M, G, $('#ladderWrap'), null);
+      return;
+    }
+    st.classList.add('brush');
     st.querySelectorAll(`[data-k="${CSS.escape(h.sym)}"]`).forEach(x => x.classList.add('lit'));
     const sec = st.querySelector(`#chips .chip[data-sec="${CSS.escape(s.sec)}"]`); if (sec) sec.classList.add('hot');
     drawLens(M, G, $('#ladderWrap'), h.sym);
-    if (e) showInspector(s, e);
+    if (e) { if (savedAt && i) i._at = savedAt; showInspector(s, e); }
+    else if (keepIns) hideInspector();
   } else if (h.kind === 'sector') {
+    st.classList.add('brush');
+    if (keepIns) hideInspector();
     M.stocks.filter(s => s.sec === h.sec).forEach(s => st.querySelectorAll(`[data-k="${CSS.escape(s.s)}"]`).forEach(x => x.classList.add('lit')));
     const c = st.querySelector(`#chips .chip[data-sec="${CSS.escape(h.sec)}"]`); if (c) c.classList.add('hot');
   } else if (h.kind === 'anomaly') {
+    st.classList.add('brush');
+    if (keepIns) hideInspector();
     st.querySelectorAll('[data-k="' + (M.eventSym || '~') + '"]').forEach(x => x.classList.add('lit'));
   }
 }
@@ -5766,19 +5797,64 @@ function openUpstoxStockTab(s, cardEl) {
   });
 }
 
+function obBrushHit(e, refHover) {
+  const ref = FX.hover || refHover;
+  const tEl = e.target && e.target.closest ? e.target.closest('[data-k]') : null;
+  if (tEl && (tEl.classList.contains('tile') || tEl.classList.contains('ticket') || tEl.classList.contains('bridge'))) {
+    const sym = tEl.dataset.k;
+    return { kind: 'stock', sym, rev: ref && ref.sym === sym && ref.rev ? ref.rev : performance.now() };
+  }
+  if (tEl && tEl.classList.contains('anom')) return { kind: 'anomaly', sym: M.eventSym, t0: (ref && ref.kind === 'anomaly' && ref.t0) || performance.now() };
+  const pz = e.target && e.target.closest ? e.target.closest('#crest .pulse') : null;
+  if (pz) return obPulseHit(pz, e);
+  const chip = e.target && e.target.closest ? e.target.closest('#chips .chip') : null;
+  if (chip) return { kind: 'sector', sec: chip.dataset.sec };
+  const [x, y] = toStage(e);
+  if (x >= 66 && x <= 696 && y >= G.T0 && y < G.T1 && M.lanes && M.lanes.length) {
+    const lane = clamp(Math.floor((y - G.T0) / G.P), 0, M.lanes.length - 1);
+    const s = M.lanes[lane];
+    if (s) return { kind: 'stock', sym: s.s };
+  }
+  return null;
+}
+
+function obRestoreHoverAfterRender(prevHover) {
+  const st = $('#stage');
+  if (FX.pinned) return;
+  if (FX.show || S.stacked || !FX.ptr) {
+    FX.hover = null;
+    applyBrush(null);
+    return;
+  }
+  const p = FX.ptr;
+  const t = obStageTargetAt(st, p);
+  if (!t) {
+    if (typeof document.elementFromPoint !== 'function' && prevHover) {
+      const valid = prevHover.kind === 'stock' ? !!(M && M.bySym && M.bySym[prevHover.sym])
+        : prevHover.kind === 'sector' ? !!(M && M.stocks && M.stocks.some(x => x.sec === prevHover.sec))
+        : prevHover.kind === 'anomaly' ? !!(M && M.eventSym) : false;
+      if (valid) {
+        FX.hover = prevHover;
+        applyBrush(prevHover, { clientX: p[0], clientY: p[1], target: st }, { preserveInspector: true, keepBrushClass: true });
+        return;
+      }
+    }
+    FX.hover = null;
+    applyBrush(null);
+    return;
+  }
+  const ev = { clientX: p[0], clientY: p[1], target: t };
+  const h = obBrushHit(ev, prevHover);
+  FX.hover = h;
+  applyBrush(h, ev, { preserveInspector: true, keepBrushClass: !!h });
+}
+
 function bindInteractions() {
   const st = $('#stage'); if (st._bound) return; st._bound = true;
   st.addEventListener('mousemove', e => {
     if (S.stacked) return;
     FX.ptr = [e.clientX, e.clientY]; if (FX.show) return;   // the build show plays untouched: the hover waits for its end
-    const tEl = e.target.closest('[data-k]');
-    if (tEl && (tEl.classList.contains('tile') || tEl.classList.contains('ticket') || tEl.classList.contains('bridge'))) { setBrush({ kind: 'stock', sym: tEl.dataset.k, rev: FX.hover && FX.hover.sym === tEl.dataset.k ? FX.hover.rev : performance.now() }, e); return; }
-    if (tEl && tEl.classList.contains('anom')) { setBrush({ kind: 'anomaly', sym: M.eventSym, t0: performance.now() }, e); return; }
-    const pz = e.target.closest('#crest .pulse'); if (pz) { setBrush(obPulseHit(pz, e), e); return; }
-    const chip = e.target.closest('#chips .chip'); if (chip) { setBrush({ kind: 'sector', sec: chip.dataset.sec }, e); return; }
-    const [x, y] = toStage(e);
-    if (x >= 66 && x <= 696 && y >= G.T0 && y < G.T1) { const lane = clamp(Math.floor((y - G.T0) / G.P), 0, M.lanes.length - 1); const s = M.lanes[lane]; setBrush({ kind: 'stock', sym: s.s }, e); return; }
-    setBrush(null);
+    setBrush(obBrushHit(e), e);
   });
   st.addEventListener('mouseleave', () => { FX.ptr = null; setBrush(null); });
   st.addEventListener('click', e => {
@@ -7932,10 +8008,10 @@ function obFindUnpreview() {
 }
 // a pin put (back) on the page: a stock gets its popup where it stood, else where a click on it would open it. A
 // stock or sector the new minute no longer has is let go
-function obFindApply(h) {
+function obFindApply(h, opts) {
   const s = h && h.kind === 'stock' ? M.bySym[h.sym] : null;
   if (h && (h.kind === 'stock' ? !s : h.kind === 'sector' && !M.stocks.some(x => x.sec === h.sec))) h = null;
-  FX.pinned = h || null; applyBrush(h || null, s ? obFindAt(s, h.at) : undefined);
+  FX.pinned = h || null; applyBrush(h || null, s ? obFindAt(s, h.at) : undefined, opts);
 }
 /* the point a click on the stock would come from: where its popup stood (beside its setup card, or the same point of
    the flow, now on the stock's lane, or of the market picture), else its tile's centre, else its lane at NOW */
@@ -7953,13 +8029,13 @@ function obFindPick(i) {
   obFindClose(); FIND.inp.blur();
   obFindPin(s.s, true);
 }
-function obFindPin(sym, pulse) {
+function obFindPin(sym, pulse, opts) {
   clearTimeout(FIND.wait);
-  if (FX.show) { FIND.wait = setTimeout(() => obFindPin(sym, pulse), 150); return; }   // the build show plays untouched: the pick waits for its end
+  if (FX.show) { FIND.wait = setTimeout(() => obFindPin(sym, pulse, opts), 150); return; }   // the build show plays untouched: the pick waits for its end
   if (!M || !G || !M.bySym[sym]) return;
   const h = { kind: 'stock', sym, find: 1 };
   if (pulse) h.rev = performance.now();    // a light runs the stock's path back to the market picture
-  FX.hover = null; obFindApply(h);
+  FX.hover = null; obFindApply(h, opts);
 }
 /* a re-render (the minute update, a resize) rebuilds the page and drops what was lit. The pins come back: the
    search's own, and a stock or sector pinned with a click on the page, its popup where it stood. An open list keeps
@@ -7994,10 +8070,11 @@ function obFindRestore(k) {
     FIND.items = obFindItems(FIND.q); FIND.at = sym ? FIND.items.findIndex(s => s.s === sym) : -1;
     FIND.box.innerHTML = obFindRows(); FIND.box.scrollTop = top; obFindAria();
   }
+  const keepOpts = { preserveInspector: true, keepBrushClass: true };
   if (k.pv && FIND.open && FIND.at >= 0) { FX.pinned = k.prev; obFindPreview(FIND.at); }
-  else if (k.pv && k.prev) obFindApply(k.prev);
-  else if (k.pin) obFindPin(k.pin, false);
-  else if (k.held && !FX.show) obFindApply(k.held);   // the build show plays untouched
+  else if (k.pv && k.prev) obFindApply(k.prev, keepOpts);
+  else if (k.pin) obFindPin(k.pin, false, keepOpts);
+  else if (k.held && !FX.show) obFindApply(k.held, keepOpts);   // the build show plays untouched
 }
 if (!OB_PEEK) {
   window.addEventListener('keydown', e => {
@@ -8125,6 +8202,10 @@ function obControlsPlace() {
     }
     secSel.value = cur;
   }
+  const sortSel = document.getElementById("obSortSel");
+  if (sortSel) {
+    sortSel.value = (OBF_FEED.filter && OBF_FEED.filter.sort) || "MAX_GAINS";
+  }
 }
 
 /* ================= main ================= */
@@ -8162,9 +8243,13 @@ function computeScale() {
 }
 function renderStage() {
   const st = $('#stage'), obKeep = obFindKeep();
+  const prevHover = typeof FX !== 'undefined' && !FX.pinned && FX.hover ? obFindCopy(FX.hover) : null;
+  if (prevHover && typeof FX !== 'undefined' && FX.hover && FX.hover.rev) prevHover.rev = FX.hover.rev;
   if (typeof FX !== 'undefined') { FX.hover = null; FX.pinned = null; }
   if (typeof PH !== 'undefined') PH.gen++;
-  st.classList.remove('brush'); const ins = $('#inspector'); if (ins) { ins.classList.remove('on'); ins._at = null; }
+  if (typeof FX !== 'undefined' && FX.show) {
+    st.classList.remove('brush'); const ins = $('#inspector'); if (ins) { ins.classList.remove('on'); ins._at = null; }
+  }
   G = layout(S.Hd, M);
   css(st, { width: G.W, height: S.Hd, left: S.left, top: S.top }); st.style.transform = `scale(${S.s})`;
   st.classList.toggle('t3off', !S.tier3); st.style.setProperty('--tx', S.tx); st.style.setProperty('--txc', S.crest2 ? Math.min(S.tx, 1.3) : Math.min(S.tx, 1.08)); st.classList.toggle('crest2', !!S.crest2);
@@ -8182,6 +8267,7 @@ function renderStage() {
   const f = $('#footer'); if (f) { css(f, { top: S.Hd - 21 }); f.textContent = FOOT_TXT; }
   if (typeof afterRender === 'function') afterRender();
   obFindRestore(obKeep); obControlsPlace();   // the field placed over the new stage, the pin and the list back (terminal_find.js)
+  obRestoreHoverAfterRender(prevHover);
 }
 function boot() {
   if (OB_PEEK) { obPeekBoot(); return; }
@@ -8225,7 +8311,12 @@ function rerender(resize) {
   document.body.classList.toggle('stacked', S.stacked); document.documentElement.classList.toggle('stacked', S.stacked);
   try {
     if (S.stacked) { if (typeof renderStack === 'function') renderStack(); }
-    else { renderStage(); if (typeof settleShow === 'function') settleShow(); }
+    else {
+      const wasShowing = typeof FX !== 'undefined' && FX.show;
+      renderStage();
+      if (typeof settleShow === 'function') settleShow();
+      if (wasShowing && typeof obHoverAfterShow === 'function') obHoverAfterShow();
+    }
   } catch (e) { console.warn('rerender failed', e); }
 }
 OBF_FEED.onUpdate = function (d) { if (FX.show) { setTimeout(() => { if (OBF_FEED.data === d) OBF_FEED.onUpdate(d); }, 300); return; }

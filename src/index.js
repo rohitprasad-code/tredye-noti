@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { getMarketStatus } = require('./market/hours');
 const { TredyeClient } = require('./tredye/client');
-const { UpstoxClient } = require('./upstox/client');
+const { UpstoxClient, normalizeBearerToken, decodeJwtClaims } = require('./upstox/client');
 const { scoreAndRankUniverse } = require('./engine/flow');
 const { locateActionableOB } = require('./engine/orderblocks');
 const { SignalEngine } = require('./engine/signals');
@@ -28,17 +28,21 @@ function loadDotEnv(envPath = path.join(process.cwd(), '.env')) {
   }
 }
 
-function saveDotEnvKeyValues(updates, envPath = path.join(process.cwd(), '.env')) {
+function saveDotEnvKeyValues(
+  updates,
+  envPath = path.join(process.cwd(), '.env'),
+  { updateProcessEnv = true } = {}
+) {
   let content = '';
   if (fs.existsSync(envPath)) {
     content = fs.readFileSync(envPath, 'utf8');
-  } else if (fs.existsSync(path.join(process.cwd(), '.env.example'))) {
+  } else if (envPath === path.join(process.cwd(), '.env') && fs.existsSync(path.join(process.cwd(), '.env.example'))) {
     content = fs.readFileSync(path.join(process.cwd(), '.env.example'), 'utf8');
   }
 
   for (const [key, val] of Object.entries(updates)) {
     if (val === undefined) continue;
-    process.env[key] = String(val);
+    if (updateProcessEnv) process.env[key] = String(val);
     const regex = new RegExp(`^${key}=.*$`, 'm');
     if (regex.test(content)) {
       content = content.replace(regex, `${key}=${val}`);
@@ -46,6 +50,7 @@ function saveDotEnvKeyValues(updates, envPath = path.join(process.cwd(), '.env')
       content += `\n${key}=${val}`;
     }
   }
+  fs.mkdirSync(path.dirname(envPath), { recursive: true });
   fs.writeFileSync(envPath, content.trim() + '\n', { mode: 0o600 });
 }
 
@@ -286,11 +291,34 @@ function buildOrderBlockRealData(rawBars, { isBull, ltp, prevClose, quoteDate } 
 }
 
 /**
- * Computes a 0–100 Setup Score combining flow strength (60%),
+ * Computes flow confluence and strength specifically in the requested direction (`isBull`).
+ * Prevents counter-flow stocks (e.g., green price with BEAR flow) from earning opposing flow credit.
+ */
+function getDirectionalFlowMetrics(c, isBull) {
+  const wantSide = isBull ? 'BULL' : 'BEAR';
+  const aligned = !c.side || c.side === wantSide;
+  const total = Number(c.checks?.length || c.totalChecks || 5);
+  let agreeInDir;
+  if (Array.isArray(c.checks) && c.checks.length > 0) {
+    agreeInDir = c.checks.filter(ch => (isBull ? ch.bull : !ch.bull)).length;
+  } else if (c.side === wantSide) {
+    agreeInDir = Number(c.agree || 0);
+  } else if (c.side && c.side !== 'FLAT') {
+    agreeInDir = Math.max(0, total - Number(c.agree || 0));
+  } else {
+    agreeInDir = Math.min(total, Number(c.agree || 0));
+  }
+  const strengthInDir = aligned ? Math.max(0, Math.min(100, Number(c.strengthScore || 0))) : 0;
+  return { aligned, agreeInDir, strengthInDir, total };
+}
+
+/**
+ * Computes a 0–100 Setup Score combining aligned flow strength (60%),
  * directional % momentum (20%), and aligned Order Block proximity/status (20%).
  */
 function computeSetupScore(c, isBull) {
-  const flowPts = Math.max(0, Math.min(100, Number(c.strengthScore || 0))) * 0.6;
+  const { strengthInDir } = getDirectionalFlowMetrics(c, isBull);
+  const flowPts = strengthInDir * 0.6;
   const absChg = Math.abs(Number(c.chgPct || 0));
   const momPts = Math.min(1, absChg / 5) * 20;
 
@@ -299,11 +327,14 @@ function computeSetupScore(c, isBull) {
     : (c.bestBearOB || (c.primaryOB && !c.primaryOB.bull ? c.primaryOB : null));
 
   let obPts = 0;
-  if (alignedOB && !alignedOB.invalidated && !alignedOB.mit) {
+  if (alignedOB && !alignedOB.invalidated && alignedOB.status !== 'MITIGATED') {
     const dist = alignedOB.distPct;
     if (alignedOB.status === 'IN_ZONE' || dist === 0) obPts = 20;
-    else if (alignedOB.status === 'RETESTED_HELD' && dist !== null && dist <= 0.5) obPts = 17;
-    else if (dist !== null && dist <= 0.5) obPts = 15;
+    else if (alignedOB.status === 'RETESTED_HELD') {
+      if (dist !== null && dist <= 0.5) obPts = 17;
+      else if (dist !== null && dist <= 1.5) obPts = 9;
+      else obPts = 4;
+    } else if (dist !== null && dist <= 0.5) obPts = 15;
     else if (dist !== null && dist <= 1.5) obPts = 10;
     else obPts = 5;
   }
@@ -317,12 +348,15 @@ function compareOrderBlockCandidates(a, b, isBull, sort = 'MAX_GAINS') {
   const absChgB = Math.abs(Number(b.chgPct || 0));
   const flowA = Number(a.rupeeFlowCr || 0) * dir;
   const flowB = Number(b.rupeeFlowCr || 0) * dir;
+  const dirA = getDirectionalFlowMetrics(a, isBull);
+  const dirB = getDirectionalFlowMetrics(b, isBull);
 
   if (sort === 'SETUP_SCORE') {
     return (
+      Number(dirB.aligned) - Number(dirA.aligned) ||
       computeSetupScore(b, isBull) - computeSetupScore(a, isBull) ||
-      Number(b.agree || 0) - Number(a.agree || 0) ||
-      Number(b.strengthScore || 0) - Number(a.strengthScore || 0) ||
+      dirB.agreeInDir - dirA.agreeInDir ||
+      dirB.strengthInDir - dirA.strengthInDir ||
       flowB - flowA ||
       absChgB - absChgA
     );
@@ -330,24 +364,28 @@ function compareOrderBlockCandidates(a, b, isBull, sort = 'MAX_GAINS') {
 
   if (sort === 'FLOW_SCORE') {
     return (
-      Number(b.agree || 0) - Number(a.agree || 0) ||
-      Number(b.strengthScore || 0) - Number(a.strengthScore || 0) ||
+      Number(dirB.aligned) - Number(dirA.aligned) ||
+      dirB.agreeInDir - dirA.agreeInDir ||
+      dirB.strengthInDir - dirA.strengthInDir ||
       flowB - flowA ||
       absChgB - absChgA
     );
   }
 
-  // MAX_GAINS — rank strictly by % move first, then strengthScore and directional flow
+  // MAX_GAINS — rank strictly by % move first, then aligned strength and directional flow
   return (
     absChgB - absChgA ||
-    Number(b.strengthScore || 0) - Number(a.strengthScore || 0) ||
+    Number(dirB.aligned) - Number(dirA.aligned) ||
+    dirB.strengthInDir - dirA.strengthInDir ||
     flowB - flowA
   );
 }
 
 class TredyeFlowService {
   constructor(options = {}) {
-    loadDotEnv();
+    this.envFile = options.envPath || path.join(process.cwd(), '.env');
+    this.persistProcessEnv = !options.envPath;
+    loadDotEnv(this.envFile);
     this.port = Number(options.port || process.env.PORT || 4600);
     this.dashboardUrl = `http://localhost:${this.port}`;
     this.demoMode = Boolean(options.demo);
@@ -359,7 +397,7 @@ class TredyeFlowService {
     this.config = { ...baseCfg, ...(savedCfg || {}) };
 
     this.client = new TredyeClient();
-    this.upstox = new UpstoxClient();
+    this.upstox = new UpstoxClient(options.upstox);
     this.signals = new SignalEngine({ db: this.store });
 
     // Runtime state for dashboard & inspector
@@ -546,8 +584,6 @@ class TredyeFlowService {
       let chg = Number(c.chgPct || 0);
       if (isBull && chg <= 0) chg = 0.08;
       if (!isBull && chg >= 0) chg = -0.08;
-      // Ensure non-event unless truly >10% crash
-      if (!isBull && chg < -9.8 && idx > 0) chg = -9.5;
 
       const prev = Number(c.prev || (ltp / (1 + chg / 100)));
       const cp = Number((ltp - prev).toFixed(2));
@@ -560,6 +596,7 @@ class TredyeFlowService {
       const maxTop = isBull ? Math.min(20, maxContendersPerSide) : Math.min(20, maxBearContenders);
       const isTop = idx < maxTop;
 
+      const dirFlow = getDirectionalFlowMetrics(c, isBull);
       const inst = this.upstox?.instrumentBySymbol?.get(c.symbol);
       const item = {
         s: c.symbol,
@@ -577,9 +614,10 @@ class TredyeFlowService {
         fo: true,
         w,
         bu: c.buildup || (isBull ? 'LONG BUILD-UP' : 'SHORT BUILD-UP'),
-        flowAgree: Number(c.agree || 0),
+        flowSide: c.side || (isBull ? 'BULL' : 'BEAR'),
+        flowAgree: dirFlow.agreeInDir,
         flowCr: Number(c.rupeeFlowCr || 0),
-        strengthScore: Number(c.strengthScore || 0),
+        strengthScore: dirFlow.strengthInDir,
         setupScore: computeSetupScore(c, isBull),
         obStr: Number((isBull ? (c.bestBullOB?.str || c.primaryOB?.str) : (c.bestBearOB?.str || c.primaryOB?.str)) || 1.5),
       };
@@ -976,6 +1014,10 @@ class TredyeFlowService {
     return this.upstox.getStatus();
   }
 
+  _saveEnv(updates) {
+    saveDotEnvKeyValues(updates, this.envFile, { updateProcessEnv: this.persistProcessEnv });
+  }
+
   updateUpstoxConfig({ apiKey, apiSecret, redirectUri, accessToken }) {
     const envUpdates = {};
     if (apiKey !== undefined) envUpdates.UPSTOX_API_KEY = String(apiKey).trim();
@@ -983,11 +1025,12 @@ class TredyeFlowService {
     if (redirectUri !== undefined && String(redirectUri).trim()) {
       envUpdates.UPSTOX_REDIRECT_URI = String(redirectUri).trim();
     }
-    if (accessToken !== undefined && String(accessToken).trim()) {
-      envUpdates.UPSTOX_ACCESS_TOKEN = String(accessToken).trim();
+    const cleanToken = accessToken !== undefined ? normalizeBearerToken(accessToken) : '';
+    if (cleanToken) {
+      envUpdates.UPSTOX_ACCESS_TOKEN = cleanToken;
     }
-    saveDotEnvKeyValues(envUpdates);
-    this.upstox.updateConfig({ apiKey, apiSecret, redirectUri, accessToken });
+    this._saveEnv(envUpdates);
+    this.upstox.updateConfig({ apiKey, apiSecret, redirectUri, accessToken: cleanToken || undefined });
 
     if (this.upstox.isConnected() && !this.dryRun) {
       this.ensureUpstoxWebSocket().catch(() => {});
@@ -1001,9 +1044,48 @@ class TredyeFlowService {
     };
   }
 
+  async saveUpstoxAccessToken(rawToken, { verify = true } = {}) {
+    const cleanToken = normalizeBearerToken(rawToken);
+    if (!cleanToken) {
+      const err = new Error('Upstox token is required');
+      err.status = 400;
+      throw err;
+    }
+
+    if (verify) {
+      await this.upstox.verifyAccessToken(cleanToken);
+    }
+
+    const claims = decodeJwtClaims(cleanToken);
+    const isLongLived = Boolean(
+      claims?.expMs && claims?.iatMs && claims.expMs - claims.iatMs >= 30 * 86400 * 1000
+    );
+    const tokenSource = isLongLived ? 'analytics' : 'manual';
+
+    this._saveEnv({
+      UPSTOX_ACCESS_TOKEN: cleanToken,
+      UPSTOX_EXTENDED_TOKEN: '',
+    });
+    this.upstox.updateConfig({
+      accessToken: cleanToken,
+      extendedToken: '',
+      tokenSource,
+    });
+
+    if (this.upstox.isConnected() && !this.dryRun) {
+      this.ensureUpstoxWebSocket().catch(() => {});
+      this.runPollCycle({ manual: true }).catch(() => {});
+    }
+    this.broadcast('state', this.getPublicState());
+    return { ok: true, status: this.upstox.getStatus() };
+  }
+
   async completeUpstoxOAuth(code) {
     const profile = await this.upstox.exchangeCode(code);
-    saveDotEnvKeyValues({ UPSTOX_ACCESS_TOKEN: this.upstox.accessToken });
+    this._saveEnv({
+      UPSTOX_ACCESS_TOKEN: this.upstox.accessToken,
+      UPSTOX_EXTENDED_TOKEN: this.upstox.extendedToken || '',
+    });
     if (!this.dryRun) {
       await this.runPollCycle({ manual: true });
       this.ensureUpstoxWebSocket().catch(() => {});
@@ -1014,7 +1096,10 @@ class TredyeFlowService {
 
   disconnectUpstox() {
     this.upstox.clearToken();
-    saveDotEnvKeyValues({ UPSTOX_ACCESS_TOKEN: '' });
+    this._saveEnv({
+      UPSTOX_ACCESS_TOKEN: '',
+      UPSTOX_EXTENDED_TOKEN: '',
+    });
     this.broadcast('state', this.getPublicState());
     return this.upstox.getStatus();
   }
