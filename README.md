@@ -1,6 +1,6 @@
 # Tredye Flow Alerts — Order Block & Order-Flow Terminal
 
-A local Node.js service and real-time **Order Block Terminal** (`http://localhost:4600`) that monitors **218 NSE F&O stocks** during NSE market hours (`09:15–15:30 IST`), blends **Tredye Order Flow** (`cvd`, `poc`, `buildup`, 3m profiles) with **Upstox live quotes, depth, intraday candles & WebSocket V3 ticks**, and detects actionable **Order Blocks (`₹bot–top`)**.
+A free, open-source ([MIT](LICENSE)) local alternative to [order-block.com/app/orderblock](https://order-block.com/app/orderblock) — a self-hosted Node.js service and real-time **Order Block Terminal** (`http://localhost:4600`) that monitors **218 NSE F&O stocks** during NSE market hours (`09:15–15:30 IST`), blends **Tredye Order Flow** (`cvd`, `poc`, `buildup`, 3m profiles) with **Upstox live quotes, depth, intraday candles & WebSocket V3 ticks**, and detects actionable **Order Blocks (`₹bot–top`)**.
 
 > **Manual Review Only:** This project is for market research and manual chart review. It **never places orders** and is not financial advice.
 
