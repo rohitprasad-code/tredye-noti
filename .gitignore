@@ -10,6 +10,7 @@ data/*.db-wal
 data/*.db-shm
 data/upstox-token.json
 *.log
+scripts/*.plist
 .recon/
 .DS_Store
 

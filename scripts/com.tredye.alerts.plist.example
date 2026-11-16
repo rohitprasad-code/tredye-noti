@@ -9,11 +9,11 @@
   <array>
     <string>/usr/local/bin/node</string>
     <string>--no-warnings</string>
-    <string>/Users/rohitprasad/Backup/tredye-noti/src/index.js</string>
+    <string>/path/to/tredye-noti/src/index.js</string>
   </array>
 
   <key>WorkingDirectory</key>
-  <string>/Users/rohitprasad/Backup/tredye-noti</string>
+  <string>/path/to/tredye-noti</string>
 
   <key>RunAtLoad</key>
   <true/>
@@ -22,10 +22,10 @@
   <true/>
 
   <key>StandardOutPath</key>
-  <string>/Users/rohitprasad/Backup/tredye-noti/data/service.out.log</string>
+  <string>/path/to/tredye-noti/data/service.out.log</string>
 
   <key>StandardErrorPath</key>
-  <string>/Users/rohitprasad/Backup/tredye-noti/data/service.err.log</string>
+  <string>/path/to/tredye-noti/data/service.err.log</string>
 </dict>
 </plist>
 

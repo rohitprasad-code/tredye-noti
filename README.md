@@ -2,23 +2,34 @@
 
 A local Node.js service and real-time **Order Block Terminal** (`http://localhost:4600`) that monitors **218 NSE F&O stocks** during NSE market hours (`09:15–15:30 IST`), blends **Tredye Order Flow** (`cvd`, `poc`, `buildup`, 3m profiles) with **Upstox live quotes, depth, intraday candles & WebSocket V3 ticks**, and detects actionable **Order Blocks (`₹bot–top`)**.
 
-> **Manual Review Only:** This system never places orders. Every signal and alert is for manual inspection so you can evaluate the Order Flow & Order Block setup yourself.
+> **Manual Review Only:** This project is for market research and manual chart review. It **never places orders** and is not financial advice.
 
 ---
 
-## Quick Start
+## Features
+
+- **Try Immediately Offline (`npm run demo`):** Built-in NSE sample dataset (`data/sample-fixture.js`) so anyone can explore the terminal without Upstox or Tredye credentials.
+- **5-Stage Order-Flow Funnel (`/app/orderblock`):** Ranks 218 NSE F&O stocks across 5 confluence signals (`VWAP`, `POC`, `Buy%`, `CVD`, `Book Imbalance`), sector filters, side filters (`All`, `Bullish`, `Bearish`), and 3 ranking modes.
+- **Automated Order Block Detection:** Identifies unmitigated Bullish/Bearish Order Blocks on intraday candles with invalidation and proximity scoring (`IN_ZONE`, `RETESTED_HELD`, `UNTESTED`).
+- **Live Upstox Integration:** Supports both **1-Year Analytics Tokens** and **Daily OAuth Login**, plus WebSocket V3 real-time ticks and 5-level market depth.
+- **Local SQLite Persistence:** Stores alerts and terminal rule settings locally via Node's built-in `node:sqlite` (`data/tredye-alerts.db`).
+- **Dark & Light Themes:** Defaults to your OS/browser preference with a sidebar theme toggle (`src/server/public/nav-rail.js`).
+
+---
+
+## Quick Start (No Credentials Required)
+
+### Prerequisites
+- **Node.js `>= 22.5`** (required for the built-in `node:sqlite` module)
+
+### Clone, Install & Run Demo
 
 ```bash
-# 1. Start the local service & Order Block Terminal (http://localhost:4600)
-npm start
+git clone https://github.com/rohitprasad-code/tredye-noti.git
+cd tredye-noti
+npm install
 
-# 2. Run unit tests (9 tests)
-npm test
-
-# 3. Run a single CLI dry-run summary
-npm run dry-run
-
-# 4. Run with sample data only (no credentials required)
+# Start with built-in NSE sample data (no API keys needed)
 npm run demo
 ```
 
@@ -26,27 +37,58 @@ Then open **http://localhost:4600** in your browser.
 
 ---
 
-## Pages & Navigation
+## Available Scripts
 
-- **`/` or `/app/orderblock` — Order Block Terminal:** Live 218-stock flow funnel, sector & side filters (`All`, `Bullish`, `Bearish`), 3 sort modes, 15m/5m candlestick & Order Block cards, and dark/light theme toggle.
-- **`/app/settings` (or `/settings`) — Settings:** Accessible from the bottom **⚙ Settings** icon in the left sidebar. Configure **Upstox API** credentials & OAuth login plus **Terminal Rules** (poll interval, Top-N, min confluence signals, OB proximity %, confirm polls, min price, watchlist, and ignore list).
+| Command | Description |
+| :--- | :--- |
+| `npm run demo` | Start the terminal on `:4600` using built-in sample data only (`--demo`) |
+| `npm start` | Start the live service & dashboard (`node --env-file-if-exists=.env src/index.js`) |
+| `npm run dev` | Same as `npm start` for local development |
+| `npm run dry-run` | Print a single CLI summary of top setups & alerts and exit (`--dry-run`) |
+| `npm test` | Run the test suite (`node --test test/engine.test.js`, 24 tests) |
+| `npm run next:dev` | Run the standalone Next.js App Router UI shell (`src/app/`) on port `3000` |
+| `npm run build` | Build the Next.js App Router frontend (`next build`) |
+
+> **Note:** `npm start` / `npm run demo` serves the complete Express backend, API endpoints, and terminal UI at `http://localhost:4600`.
 
 ---
 
-## Connecting Live Data (Upstox + Tredye)
+## Pages & Navigation
+
+- **`/` or `/app/orderblock` — Order Block Terminal:** Live 218-stock flow funnel, sector & side filters (`All`, `Bullish`, `Bearish`), 3 sort modes, 15m/5m candlestick & Order Block cards, hover inspector, and dark/light theme toggle.
+- **`/app/settings` (or `/settings`) — Settings:** Accessible from the bottom **⚙ Settings** icon in the left sidebar. Configure **Upstox API** credentials (1-Year Analytics Token or OAuth login), **Display & Ambient FX**, and **Terminal Rules** (poll interval, Top-N, min confluence signals, OB proximity %, confirm polls, min price, watchlist, and ignore list).
+
+---
+
+## Connecting Live Data (Optional: Upstox + Tredye)
+
+Without live credentials, the app falls back to the built-in **NSE Sample Replay** (`RELIANCE`, `ICICIBANK`, `BHARTIARTL`, `TATAMOTORS`, `INFY`, `TCS`, etc.).
 
 ### 1. Upstox Real-Time Quotes, Depth & WebSocket V3
 1. Open **http://localhost:4600/app/settings** (or click **⚙** at the bottom of the left sidebar).
-2. In the [Upstox Developer Console](https://account.upstox.com/developer/apps/createapp), set your app's **Redirect URL** to:
+2. **Option A — 1-Year Analytics Token (Recommended):** Generate an Analytics Token in [Upstox Developer Apps](https://account.upstox.com/developer/apps), paste it under **One-Time Login**, and click **Save 1-Year Token**.
+3. **Option B — Daily OAuth Login:** In the [Upstox Developer Console](https://account.upstox.com/developer/apps/createapp), set your app's **Redirect URL** to:
    ```text
    http://localhost:4600/api/upstox/callback
    ```
-3. Paste your **API Key** and **API Secret** on `/app/settings` and click **Save & Login with Upstox** (keys are saved locally in `.env`).
+   Paste your **API Key** and **API Secret** on `/app/settings` and click **Save & Login with Upstox** (saved locally in `.env`).
 
 ### 2. Tredye Session (`.env`)
 Copy `.env.example` to `.env` and set `TREDYE_EMAIL` + `TREDYE_PASSWORD` (or `TREDYE_COOKIE` from Chrome DevTools `Network` → `/api/orderflow` → `Cookie`).
 
-Without live credentials, the app falls back to a built-in **NSE Sample Replay** (`RELIANCE`, `ICICIBANK`, `BHARTIARTL`, `TATAMOTORS`, `INFY`, `TCS`, etc.).
+```bash
+cp .env.example .env
+npm start
+```
+
+---
+
+## Optional: macOS Background Service (`launchd`)
+
+If you want to run the terminal continuously on macOS:
+1. Copy `scripts/com.tredye.alerts.plist.example` to `scripts/com.tredye.alerts.plist` (or `~/Library/LaunchAgents/com.tredye.alerts.plist`).
+2. Replace `/usr/local/bin/node` and `/path/to/tredye-noti` with your local paths.
+3. Load it with `launchctl load ~/Library/LaunchAgents/com.tredye.alerts.plist`.
 
 ---
 
@@ -81,3 +123,32 @@ For full formulas and examples, see [docs/ORDER_FLOW_RANKING.md](docs/ORDER_FLOW
 - **🟢/🔴 `NEW_STRONG_FLOW`:** Sustained Top-N flow across `confirmPolls` consecutive polls.
 - **⚠️ `FLOW_FLIP`:** Previously alerted symbol flips to strong opposing flow.
 - **⏰ `REMINDER_DUE`:** Re-evaluates scheduled reminder timers (`STILL HOLDS ✅`, `NOW IN OB ZONE 🎯`, or `FLIPPED ❌`).
+
+---
+
+## Project Structure
+
+```text
+├── config.json                     # Default terminal rules
+├── data/                           # Sample fixture, instrument map & local SQLite DB (ignored)
+├── docs/ORDER_FLOW_RANKING.md      # Detailed ranking & scoring formulas
+├── scripts/                        # Example macOS launchd plist template
+├── src/
+│   ├── app/ & src/components/      # Next.js App Router views (OrderBlock & Settings)
+│   ├── client/                     # Modular frontend CSS/JS bundles
+│   ├── config/                     # .env & config.json loaders
+│   ├── engine/                     # Flow scoring, Order Block detection, ranking & signals
+│   ├── market/                     # NSE market hours & holiday schedule (IST)
+│   ├── server/                     # Express server, SSE stream & static HTML shells
+│   ├── service/                    # Polling loop & live/demo orchestration
+│   ├── store/                      # SQLite persistence (node:sqlite)
+│   ├── tredye/                     # Tredye order-flow API client
+│   └── upstox/                     # Upstox REST, OAuth, JWT & WebSocket V3 proto client
+└── test/engine.test.js             # Unit & integration test suite
+```
+
+---
+
+## License
+
+[MIT](LICENSE)
