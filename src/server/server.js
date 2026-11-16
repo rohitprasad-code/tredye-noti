@@ -4,8 +4,15 @@ const http = require('node:http');
 const path = require('node:path');
 const express = require('express');
 const compression = require('compression');
+const { getFontsBundleCss } = require('./fonts-bundle');
+const {
+  getOrderBlockCssBundle,
+  getOrderBlockLightCss,
+  getOrderBlockJsBundle,
+} = require('../client/orderblock');
 
 const PUBLIC_DIR = path.join(__dirname, 'public');
+const CLIENT_SETTINGS_DIR = path.resolve(__dirname, '../client/settings');
 const NODE_MODULES_DIR = path.join(process.cwd(), 'node_modules');
 
 function createDashboardServer(appController) {
@@ -76,7 +83,7 @@ function createDashboardServer(appController) {
       const side = String(req.query.side || 'ALL');
       const sort = String(req.query.sort || 'MAX_GAINS');
       const snap = await appController.getOrderBlockFunnelSnapshot({ sector, side, sort });
-      res.set('Cache-Control', 'no-store');
+      res.set('Cache-Control', 'private, no-cache');
       res.json(snap);
     })
   );
@@ -188,9 +195,37 @@ function createDashboardServer(appController) {
 
   // Local npm-installed vendor assets (immutable aggressive caching)
   const vendorCacheOpts = { maxAge: '365d', immutable: true };
+  app.get('/vendor/fonts.css', (_req, res) => {
+    res.set('Content-Type', 'text/css; charset=utf-8');
+    res.set('Cache-Control', 'public, max-age=31536000, immutable');
+    res.send(getFontsBundleCss());
+  });
   app.use('/vendor/fonts', express.static(path.join(NODE_MODULES_DIR, '@fontsource'), vendorCacheOpts));
   app.get('/vendor/gsap.min.js', (_req, res) => {
     res.sendFile(path.join(NODE_MODULES_DIR, 'gsap/dist/gsap.min.js'), vendorCacheOpts);
+  });
+
+  // Modular OrderBlock & Settings client bundles (ETag revalidated)
+  app.get('/static/ob/orderblock.css', (_req, res) => {
+    res.set('Content-Type', 'text/css; charset=utf-8');
+    res.set('Cache-Control', 'public, max-age=0, must-revalidate');
+    res.send(getOrderBlockCssBundle());
+  });
+  app.get('/static/ob/orderblock-light.css', (_req, res) => {
+    res.set('Content-Type', 'text/css; charset=utf-8');
+    res.set('Cache-Control', 'public, max-age=0, must-revalidate');
+    res.send(getOrderBlockLightCss());
+  });
+  app.get('/static/ob/orderblock.js', (_req, res) => {
+    res.set('Content-Type', 'application/javascript; charset=utf-8');
+    res.set('Cache-Control', 'public, max-age=0, must-revalidate');
+    res.send(getOrderBlockJsBundle());
+  });
+  app.get('/static/settings/settings.css', (_req, res) => {
+    res.sendFile(path.join(CLIENT_SETTINGS_DIR, 'settings.css'));
+  });
+  app.get(['/settings.js', '/static/settings/settings-controller.js'], (_req, res) => {
+    res.sendFile(path.join(CLIENT_SETTINGS_DIR, 'settings-controller.js'));
   });
 
   // Order Block Terminal & dedicated Settings page

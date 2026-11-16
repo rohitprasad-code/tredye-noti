@@ -1,0 +1,266 @@
+/* ================= OrderBlock · light theme for the Order Block terminal =================
+   Injected before </head> of web/terminal/terminal.html by tools/patch_terminal.py.
+   02.html (the dark design) is untouched: every rule here applies only under
+   html[data-theme=light], which the script below sets from the app's sun / moon toggle.
+   Colours only — no element, size or position changes. Canvas colours are remapped at draw
+   time by the script; these rules re-colour the CSS and the inline styles the page writes. */
+:root[data-theme=light]{color-scheme:light;
+  --bg:#F4F6F9; --bg-2:#EDF0F5; --panel:#FFFFFF; --raised:#EEF2F7; --hair:#DCE2EB; --grid:#E5EAF1;
+  --ink:#0B1220; --ink-2:#434F63; --ink-3:#5F6B80; --ink-4:#9AA4B4;
+  --bull:#0E9F63; --bull-hi:#087A4A; --bull-hot:#05603A; --bull-deep:#8FD4B3; --bull-dark:#E4F5EC; --bull-mute:#3DAA7C; --bull-glow:rgba(14,159,99,.25);
+  --bear:#E23D4F; --bear-hi:#C21D3C; --bear-hot:#97112C; --bear-deep:#F0A0B0; --bear-dark:#FCE9EC; --bear-mute:#D9546D; --bear-glow:rgba(226,61,79,.25);
+  --spine:#1C2640; --nifty:#0F172A; --wall:#2B64F0; --wall-base:#DCE6FA; --vwap:#2563EB; --neutral-lane:#C3CBD7;
+  --amber:#A86400; --crash:#D2461F; --slate-candle:#A3ADBD}
+
+/* side colours written inline by the page (--sc side, --hi text, --hot emphasis, --mc motes) */
+:root[data-theme=light] [style*="--sc: 25,229,140"],:root[data-theme=light] [style*="--sc:25,229,140"],:root[data-theme=light] #inspector[data-side="bull"]{--sc:14,159,99!important;--hi:8,122,74!important}
+:root[data-theme=light] [style*="--sc: 255,59,92"],:root[data-theme=light] [style*="--sc:255,59,92"],:root[data-theme=light] #inspector[data-side="bear"]{--sc:226,61,79!important;--hi:194,29,60!important}
+:root[data-theme=light] [style*="--sc: 255,176,32"],:root[data-theme=light] [style*="--sc:255,176,32"],:root[data-theme=light] #inspector[data-side="event"]{--sc:194,120,0!important;--hi:168,100,0!important}
+:root[data-theme=light] [style*="--hi: 124,255,196"]{--hi:8,122,74!important}
+:root[data-theme=light] [style*="--hi: 255,154,168"]{--hi:194,29,60!important}
+:root[data-theme=light] [style*="--hi: 255,176,32"]{--hi:168,100,0!important}
+:root[data-theme=light] [style*="--hot: 201,255,233"]{--hot:5,96,58!important}
+:root[data-theme=light] [style*="--hot: 255,211,220"]{--hot:151,17,44!important}
+:root[data-theme=light] [style*="--mc: 201,255,233"]{--mc:5,96,58!important}
+:root[data-theme=light] [style*="--mc: 255,211,220"]{--mc:151,17,44!important}
+
+/* ---------- stage ---------- */
+:root[data-theme=light] #atmo{background:
+    radial-gradient(60vw 60vh at 85% 50%, rgba(70,110,200,.05), transparent 70%),
+    radial-gradient(40vw 30vh at 85% 25%, rgba(14,159,99,.05), transparent 70%),
+    radial-gradient(40vw 30vh at 85% 75%, rgba(226,61,79,.045), transparent 70%),
+    var(--bg)}
+:root[data-theme=light] #grain{display:none}
+:root[data-theme=light] #lyLight{background:radial-gradient(1100px 800px at 1654px 50%, rgba(70,110,200,.05), transparent 70%)}
+:root[data-theme=light] #lyHalves{background:
+  radial-gradient(520px 360px at 1630px 26%, rgba(14,159,99,.07), transparent),
+  radial-gradient(520px 360px at 1630px 74%, rgba(226,61,79,.06), transparent)}
+:root[data-theme=light] #lyVig{background:linear-gradient(90deg, rgba(15,23,42,.035), transparent 35%)}
+:root[data-theme=light] #topRail{background:linear-gradient(90deg, rgba(28,38,64,.06), rgba(28,38,64,.22) 72%, rgba(28,38,64,.10))}
+
+/* ---------- crest ---------- */
+:root[data-theme=light] .brand .logo i:nth-child(-n+2),:root[data-theme=light] #stack .sbrand .logo i:nth-child(-n+2){background:rgba(14,159,99,.9)!important}
+:root[data-theme=light] .brand .logo i:nth-child(n+3),:root[data-theme=light] #stack .sbrand .logo i:nth-child(n+3){background:rgba(226,61,79,.9)!important}
+/* market pulse (the stream itself is canvas, remapped by the script below): the breathing source node */
+:root[data-theme=light] .pulse .pz{background:#1C2640;box-shadow:0 0 5px 1px rgba(88,86,242,.45),0 0 12px 2px rgba(88,86,242,.22)}
+:root[data-theme=light] .pulse .pz::after{border-color:rgba(28,38,64,.45)}
+:root[data-theme=light] .pulse .pcount b{text-shadow:none}
+:root[data-theme=light] .clock .eng,:root[data-theme=light] #stack .sclock .eng{box-shadow:0 0 5px rgba(37,99,235,.45)}
+:root[data-theme=light] #crest > .fade0:not(.blk){border-top-color:rgba(28,38,64,.7)!important}
+:root[data-theme=light] .breadth .n.b,:root[data-theme=light] .breadth .n.r{text-shadow:none}
+:root[data-theme=light] .breadth .bar i:first-child,:root[data-theme=light] #stack .sbreadth .bar i:first-child{background:rgba(14,159,99,.72)!important}
+:root[data-theme=light] .breadth .bar i:last-child,:root[data-theme=light] #stack .sbreadth .bar i:last-child{background:rgba(226,61,79,.72)!important}
+
+/* ---------- sector chips, index heads ---------- */
+:root[data-theme=light] #chips .chip{background:rgba(255,255,255,.9);border-color:rgba(203,211,223,.95);
+  box-shadow:0 0 0 2px rgba(244,246,249,.55),0 0 12px 3px rgba(244,246,249,.75)}
+:root[data-theme=light] #chips .chip .r1 .cap{color:rgba(52,64,84,.88)}
+:root[data-theme=light] #chips .chip:hover .r1 .cap,:root[data-theme=light] #chips .chip.hot .r1 .cap{color:var(--ink)}
+:root[data-theme=light] #chips .chip.up .r1 .v{color:#087A4A}
+:root[data-theme=light] #chips .chip.dn .r1 .v{color:#C21D3C}
+:root[data-theme=light] #chips .chip:hover .r1 .v,:root[data-theme=light] #chips .chip.hot .r1 .v{filter:none}
+:root[data-theme=light] #chips .chip .strip{opacity:.72}
+:root[data-theme=light] #chips .chip:hover .strip,:root[data-theme=light] #chips .chip.hot .strip{opacity:1}
+:root[data-theme=light] .strip i[style*="30,158,110"]{background:rgba(22,163,106,.85)!important}
+:root[data-theme=light] .strip i[style*="194,58,82"]{background:rgba(222,70,96,.72)!important}
+:root[data-theme=light] #idxTags .tag{background:rgba(255,255,255,.94);color:var(--ink-2);border-color:rgba(52,64,84,.2);box-shadow:0 1px 3px rgba(15,23,42,.08)}
+:root[data-theme=light] #idxTags .tag::after{border-left-color:rgba(52,64,84,.35)}
+:root[data-theme=light] #idxTags .tag.nf{background:var(--nifty);color:#FFFFFF;border-color:var(--nifty);box-shadow:0 2px 10px rgba(15,23,42,.22)}
+:root[data-theme=light] #idxTags .tag.nf::after{border-left-color:var(--nifty)}
+:root[data-theme=light] #idxTags .lead{background:rgba(52,64,84,.38)!important}
+:root[data-theme=light] #idxTags .tag.hot{box-shadow:0 0 0 1px rgba(28,38,64,.55),0 2px 12px rgba(28,38,64,.2)}
+
+/* ---------- NOW, nodes, reactor, station counts, gate motes, replay head ---------- */
+:root[data-theme=light] .nowline{background:rgba(28,38,64,.55)}
+:root[data-theme=light] .nowglow{background:linear-gradient(90deg,transparent,rgba(88,86,242,.06) 45%,rgba(88,86,242,.13) 50%,rgba(88,86,242,.06) 55%,transparent)}
+:root[data-theme=light] .node{background:#1C2640}
+:root[data-theme=light] .node .ring{border-color:rgba(28,38,64,.5)}
+:root[data-theme=light] .beacon{box-shadow:0 0 10px 2px rgba(88,86,242,.35),0 0 24px rgba(88,86,242,.22)}
+:root[data-theme=light] .node.st{box-shadow:0 0 8px 2px rgba(88,86,242,.3)}
+:root[data-theme=light] .reactor .core{background:radial-gradient(circle,#1C2640 0 45%,#4B4FCF 60%,rgba(88,86,242,0) 72%);box-shadow:0 0 14px 3px rgba(88,86,242,.3)}
+:root[data-theme=light] .reactor .halo{background:radial-gradient(circle,rgba(88,86,242,.16),transparent 65%)}
+:root[data-theme=light] .reactor circle[stroke="rgba(232,241,255,.75)"]{stroke:rgba(28,38,64,.65)}
+:root[data-theme=light] .reactor circle[stroke="rgba(169,184,255,.55)"]{stroke:rgba(88,86,242,.55)}
+:root[data-theme=light] .cnt b{background:rgba(255,255,255,.88)}
+:root[data-theme=light] .cnt .ld{background:rgba(52,64,84,.5)}
+:root[data-theme=light] .cnt.c6 b{color:#FFFFFF;background:#1C2640;text-shadow:none}
+:root[data-theme=light] .cnt.c6 .ld{background:rgba(28,38,64,.55)}
+:root[data-theme=light] .gmote{background:radial-gradient(circle,rgba(var(--mc),.95) 0 35%,rgba(var(--mc),.5) 60%,rgba(var(--mc),0) 100%);box-shadow:0 0 4px 1px rgba(var(--mc),.3)}
+:root[data-theme=light] #scanHead{background:linear-gradient(180deg,transparent,rgba(28,38,64,.45) 12%,rgba(28,38,64,.6) 50%,rgba(28,38,64,.45) 88%,transparent);box-shadow:0 0 8px rgba(88,86,242,.35)}
+:root[data-theme=light] #scanHead::before{background:linear-gradient(90deg,transparent,rgba(88,86,242,.06))}
+
+/* ---------- mosaic tiles ---------- */
+:root[data-theme=light] .tile{background:linear-gradient(180deg,rgba(var(--sc),.07),transparent 60%),#FFFFFF;
+  box-shadow:0 3px 10px rgba(15,23,42,.08),inset 0 0 0 1px rgba(15,23,42,.04)}
+:root[data-theme=light] .tile.pk{box-shadow:0 4px 12px rgba(15,23,42,.10),0 0 16px rgba(var(--sc),.16),inset 0 0 0 1px rgba(15,23,42,.04)}
+:root[data-theme=light] .tile .plate{background:linear-gradient(180deg,rgba(255,255,255,.97),rgba(250,251,253,.95));
+  box-shadow:inset 0 0 0 1px rgba(15,23,42,.07),0 2px 6px rgba(15,23,42,.10)}
+:root[data-theme=light] .tile .tkr{color:var(--ink)}
+:root[data-theme=light] .tile.be .pc,:root[data-theme=light] .tile.be .sub .buc,:root[data-theme=light] .tile.be .rk{color:rgb(var(--hi))}
+:root[data-theme=light] .tile .seccap{border-color:#D5DCE6}
+:root[data-theme=light] .tile .rk{background:linear-gradient(rgba(var(--sc),.12),rgba(var(--sc),.12)),#FFFFFF;box-shadow:inset 0 0 0 1px rgba(var(--sc),.45),0 1px 3px rgba(15,23,42,.12)}
+:root[data-theme=light] .tile .mg{background:linear-gradient(135deg,rgb(var(--sc)),rgb(var(--hi)) 90%)!important;border-color:rgba(var(--hi),.6)!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.25)}
+:root[data-theme=light] .pips i.on{box-shadow:0 0 3px rgba(var(--sc),.5)}
+:root[data-theme=light] .tile .latch{box-shadow:0 0 6px rgba(var(--sc),.45)}
+:root[data-theme=light] .ret i{border-color:#1C2640;box-shadow:0 0 3px rgba(28,38,64,.25)}
+:root[data-theme=light] .tile.ev .haz{background:repeating-linear-gradient(135deg,rgba(214,138,6,.32) 0 1.5px,transparent 1.5px 5px)}
+:root[data-theme=light] .tile.ev .evtxt b{color:var(--ink);background:rgba(255,255,255,.9)}
+:root[data-theme=light] .tile.ev .evtxt span{background:rgba(255,255,255,.9)}
+:root[data-theme=light] .tile.ev .rk{color:var(--amber);background:#FFFFFF;box-shadow:inset 0 0 0 1px rgba(194,120,0,.55)}
+:root[data-theme=light] .tile.lit .bd,:root[data-theme=light] #stack .tile.lit .bd{border-color:#1C2640!important}
+
+/* ---------- bridges ---------- */
+:root[data-theme=light] .bridge{box-shadow:0 0 8px rgba(var(--sc),.3)}
+:root[data-theme=light] .bridge.lit{box-shadow:0 0 12px rgba(28,38,64,.35)}
+
+/* ---------- trade tickets ---------- */
+:root[data-theme=light] .ticket{box-shadow:0 12px 28px rgba(15,23,42,.10),0 2px 6px rgba(15,23,42,.05),0 0 24px rgba(var(--sc),.10),inset 0 1px 0 rgba(255,255,255,.9)}
+:root[data-theme=light] .ticket.buy{--tbg:radial-gradient(520px 230px at 16% 0%,rgba(14,159,99,.16),transparent 70%),linear-gradient(135deg,#E2F5EB,#F8FCFA 74%)}
+:root[data-theme=light] .ticket.sell{--tbg:radial-gradient(520px 230px at 16% 100%,rgba(226,61,79,.13),transparent 70%),linear-gradient(135deg,#FBE4E8,#FCF8F9 74%)}
+:root[data-theme=light] .ticket .sheen{background:none}
+:root[data-theme=light] .ticket .sheen::before{background:conic-gradient(transparent 0 60%,rgba(var(--sc),.9) 70%,rgba(var(--hot),.9) 75%,transparent 85%)}
+:root[data-theme=light] .ticket .spec::before{background:linear-gradient(100deg,transparent,rgba(255,255,255,.35) 45%,rgba(255,255,255,.55) 50%,rgba(255,255,255,.35) 55%,transparent)}
+:root[data-theme=light] .ticket .acc{box-shadow:0 0 6px rgba(var(--sc),.5)}
+:root[data-theme=light] .ticket .mg{background:linear-gradient(135deg,rgb(var(--sc)),rgb(var(--hi)) 90%)!important;border-color:rgba(var(--hi),.5)}
+:root[data-theme=light] .ticket .nm .nms{color:rgba(11,18,32,.5)}
+:root[data-theme=light] .pill{color:#FFFFFF;background:linear-gradient(180deg,rgb(var(--sc)),rgb(var(--hi)));box-shadow:0 2px 6px rgba(var(--sc),.28)}
+:root[data-theme=light] .ticket .pill{box-shadow:inset 0 1px 0 rgba(255,255,255,.28),inset 0 -1px 0 rgba(0,0,0,.12)}
+:root[data-theme=light] .cring circle:not(.fg){stroke:rgba(15,23,42,.1)}
+:root[data-theme=light] .cring circle.fg{stroke:rgb(var(--sc))}
+:root[data-theme=light] .ticket .pc{text-shadow:none}
+:root[data-theme=light] .ticket .hero-pc{background-image:linear-gradient(180deg,rgb(var(--hot)) 0%,rgb(var(--hi)) 55%,rgb(var(--sc)) 100%)}
+:root[data-theme=light] .ticket .oi{text-decoration-color:rgba(52,64,84,.45)}
+:root[data-theme=light] .ticket .pctl{border-color:rgba(52,64,84,.32)}
+:root[data-theme=light] .ticket.lit,:root[data-theme=light] #stack .ticket.lit{outline-color:rgba(28,38,64,.6)}
+:root[data-theme=light] .ticket::before{background:linear-gradient(90deg,transparent,rgba(255,255,255,.95) 18%,rgba(255,255,255,.95) 82%,transparent)}
+/* chart well (ticket + popup chart) */
+:root[data-theme=light] .ticket .chart,:root[data-theme=light] .ichart{background:linear-gradient(180deg,rgba(255,255,255,.78),rgba(255,255,255,.6));box-shadow:inset 0 0 0 1px rgba(15,23,42,.08)}
+:root[data-theme=light] .chart .lp{background:rgb(var(--sc));box-shadow:0 0 0 1.5px #FFFFFF,0 0 6px rgba(var(--sc),.6)}
+:root[data-theme=light] .chart .pos{background:rgba(var(--sc),.13)!important;border-color:rgba(var(--sc),.55)!important}
+:root[data-theme=light] .chart .pos[style*="255, 176, 32"]{background:rgba(214,138,6,.12)!important;border-color:rgba(194,120,0,.55)!important}
+:root[data-theme=light] .ticket .chart .lg2{background:rgba(255,255,255,.88);box-shadow:inset 0 0 0 1px rgba(15,23,42,.07)}
+/* level lines + leaders (svg) */
+:root[data-theme=light] [stroke="rgb(25,229,140)"]{stroke:rgb(14,159,99)}
+:root[data-theme=light] [stroke="rgb(255,59,92)"]{stroke:rgb(226,61,79)}
+:root[data-theme=light] [stroke="rgba(124,255,196,.9)"]{stroke:rgba(8,122,74,.9)}
+:root[data-theme=light] [stroke="rgba(255,154,168,.9)"]{stroke:rgba(194,29,60,.9)}
+:root[data-theme=light] [stroke="rgba(124,255,196,.75)"]{stroke:rgba(8,122,74,.75)}
+:root[data-theme=light] [stroke="rgba(255,154,168,.75)"]{stroke:rgba(194,29,60,.75)}
+:root[data-theme=light] [stroke="rgba(255,176,32,.95)"]{stroke:rgba(194,120,0,.95)}
+:root[data-theme=light] [stroke="rgba(255,176,32,.8)"]{stroke:rgba(194,120,0,.8)}
+:root[data-theme=light] [stroke="rgba(255,255,255,.7)"]{stroke:rgba(28,38,64,.7)}
+:root[data-theme=light] [stroke="rgba(255,255,255,.55)"]{stroke:rgba(28,38,64,.5)}
+:root[data-theme=light] [fill="rgba(255,255,255,.10)"]{fill:rgba(28,38,64,.08)}
+/* level chips (ticket + popup chart) */
+:root[data-theme=light] .ticket .chip2.k-T2,:root[data-theme=light] .ichart .chip2.k-T2{background:linear-gradient(rgba(var(--sc),.14),rgba(var(--sc),.14)),#FFFFFF;border-color:rgba(var(--sc),.9);color:rgb(var(--hot));box-shadow:0 1px 4px rgba(var(--sc),.18)}
+:root[data-theme=light] .ticket .chip2.k-T1,:root[data-theme=light] .ichart .chip2.k-T1{background:linear-gradient(rgba(var(--sc),.06),rgba(var(--sc),.06)),#FFFFFF;border-color:rgba(var(--sc),.7);color:rgb(var(--hi))}
+:root[data-theme=light] .ticket .chip2.k-E,:root[data-theme=light] .ichart .chip2.k-E{background:linear-gradient(rgba(28,38,64,.07),rgba(28,38,64,.07)),#FFFFFF;border-color:rgba(28,38,64,.8);color:#1C2640;box-shadow:0 1px 4px rgba(15,23,42,.10)}
+:root[data-theme=light] .ticket .chip2.k-SL,:root[data-theme=light] .ichart .chip2.k-SL{background:linear-gradient(rgba(214,138,6,.13),rgba(214,138,6,.13)),#FFFFFF;border-color:rgba(194,120,0,.85);color:#9A5B00}
+/* hero level plan + one-line strips (keys re-declared in the page's own order) */
+:root[data-theme=light] .ticket .plan .pcell .k{color:rgba(11,18,32,.55)}
+:root[data-theme=light] .ticket .plan .rr .k{color:rgba(11,18,32,.7)}
+:root[data-theme=light] .ticket .plan .sl .k{color:#A86400}
+:root[data-theme=light] .ticket .plan .t1 .k,:root[data-theme=light] .ticket .plan .t2 .k{color:rgba(var(--hot),.78)}
+:root[data-theme=light] .ticket .plan .en .v{color:var(--ink)}
+:root[data-theme=light] .ticket .plan .rrbar{background:rgba(15,23,42,.06);box-shadow:inset 0 0 0 1px rgba(15,23,42,.05)}
+:root[data-theme=light] .ticket .plan .rrbar i.r0{background:linear-gradient(90deg,rgba(214,138,6,.85),rgba(214,138,6,.5))!important}
+:root[data-theme=light] .ticket .plan .rrbar i.r1{background:linear-gradient(90deg,rgba(var(--sc),.35),rgb(var(--sc)))!important;box-shadow:0 0 6px rgba(var(--sc),.3)}
+:root[data-theme=light] .ticket .plan .rrbar i[style*="rgba(255,255,255,.55)"]{background:rgba(28,38,64,.35)!important}
+:root[data-theme=light] .ticket .plan .rrbar i.tk[style*="#fff"]{background:#1C2640!important;box-shadow:0 0 4px rgba(28,38,64,.4)!important}
+:root[data-theme=light] .ticket .plan .rrbar i.tk[style*="rgba(255,255,255,.85)"]{background:rgba(28,38,64,.75)!important}
+:root[data-theme=light] .ticket .lvlstrip .k{color:rgba(11,18,32,.58)}
+:root[data-theme=light] .ticket .lvlstrip .sl .k{color:#A86400}
+:root[data-theme=light] .ticket .lvlstrip .t1 .k,:root[data-theme=light] .ticket .lvlstrip .t2 .k{color:rgba(var(--hot),.8)}
+:root[data-theme=light] .ticket .lvlstrip .en .v{color:var(--ink)}
+
+/* ---------- event (anomaly) strip ---------- */
+:root[data-theme=light] .anom{background:#FFFFFF;border-color:rgba(194,120,0,.5)}
+:root[data-theme=light] .anom .hz{background:repeating-linear-gradient(135deg,rgba(214,138,6,.36) 0 2px,rgba(214,138,6,.07) 2px 6px);border-right-color:rgba(194,120,0,.35)}
+:root[data-theme=light] .anom .hz span{background:rgba(255,255,255,.92)}
+
+/* ---------- footer, inspector popup, phone sheet ---------- */
+:root[data-theme=light] #footer,:root[data-theme=light] #stack .sfoot{color:rgba(52,64,84,.62)}
+:root[data-theme=light] #inspector{background:linear-gradient(180deg,rgba(var(--sc,70,84,106),.08),rgba(var(--sc,70,84,106),0) 42%),rgba(255,255,255,.98);border-color:#CBD5E1;
+  color:#334155;box-shadow:0 18px 40px rgba(15,23,42,.16),0 0 0 1px rgba(15,23,42,.05),inset 0 1px 0 rgba(255,255,255,.9)}
+:root[data-theme=light] #inspector::before{background:rgb(var(--sc,70,84,106));box-shadow:0 0 6px rgba(var(--sc,70,84,106),.5)}
+:root[data-theme=light] #inspector .h{border-bottom-color:rgba(15,23,42,.12)}
+:root[data-theme=light] #inspector .h .t{color:#0B1220}
+:root[data-theme=light] #inspector .h .n{color:#475569}
+:root[data-theme=light] #inspector .row .k{color:#475569}
+:root[data-theme=light] #inspector .row.px{border-top-color:rgba(15,23,42,.12)}
+:root[data-theme=light] #inspector .row.px .lp{color:#0B1220}
+:root[data-theme=light] #inspector .row .pp{color:rgb(var(--hi,var(--sc,70,84,106)))}
+:root[data-theme=light] #inspector .ichart{background:linear-gradient(180deg,rgba(248,250,252,.96),rgba(255,255,255,.94));border-color:#CBD5E1;box-shadow:inset 0 0 0 1px rgba(15,23,42,.05)}
+:root[data-theme=light] #inspector .g2>.row,:root[data-theme=light] #stack .sheet .g2>.row{border-left-color:rgba(52,64,84,.14)}
+:root[data-theme=light] #inspector .h .mg,:root[data-theme=light] #stack .sheet .h .mg{background:linear-gradient(135deg,rgb(var(--sc,70,84,106)),rgba(var(--sc,70,84,106),.78))!important}
+:root[data-theme=light] #inspector [style*="color:rgb(124,255,196)"],:root[data-theme=light] #stack .sheet [style*="color:rgb(124,255,196)"]{color:rgb(8,122,74)!important}
+:root[data-theme=light] #inspector [style*="color:rgb(255,154,168)"],:root[data-theme=light] #stack .sheet [style*="color:rgb(255,154,168)"]{color:rgb(194,29,60)!important}
+:root[data-theme=light] #inspector [style*="color:rgb(255,106,77)"],:root[data-theme=light] #stack .sheet [style*="color:rgb(255,106,77)"]{color:rgb(210,70,31)!important}
+:root[data-theme=light] #stack .sheet{background:linear-gradient(180deg,rgba(var(--sc,70,84,106),.08),rgba(var(--sc,70,84,106),0) 38%),#FFFFFF;border-color:#D5DCE6}
+:root[data-theme=light] #stack .sheet.on{box-shadow:0 -14px 36px rgba(15,23,42,.16),0 -1px 0 rgba(var(--sc,70,84,106),.35)}
+:root[data-theme=light] #stack .sheet .grab{background:rgba(52,64,84,.25)}
+
+/* ---------- stacked (phone) layout ---------- */
+:root[data-theme=light] #stack .sspine{background:linear-gradient(180deg,rgba(28,38,64,.12),rgba(28,38,64,.45) 40%,rgba(28,38,64,.75));box-shadow:0 0 6px rgba(88,86,242,.3)}
+:root[data-theme=light] #stack .sspine i{background:linear-gradient(180deg,transparent,#5856F2);filter:drop-shadow(0 0 3px rgba(88,86,242,.6))}
+:root[data-theme=light] #stack .splume{background:rgba(15,23,42,.02)}
+:root[data-theme=light] #stack .schips .chip{background:#FFFFFF}
+:root[data-theme=light] #stack .schips .chip .v[style*="124,255,196"]{color:#087A4A!important}
+:root[data-theme=light] #stack .schips .chip .v[style*="255,154,168"]{color:#C21D3C!important}
+:root[data-theme=light] #stack .sdiv{background:linear-gradient(90deg,rgba(28,38,64,.8),rgba(28,38,64,.2));box-shadow:0 0 8px rgba(88,86,242,.35)}
+:root[data-theme=light] #stack .sdiv i{background:radial-gradient(circle,#1C2640 0 45%,rgba(88,86,242,.3) 70%,transparent 72%);box-shadow:0 0 12px 3px rgba(88,86,242,.3)}
+/* the phone pipeline (tools/terminal_phone.css): station nav glass, spine, setup chips, sheet, scrim, loupe */
+:root[data-theme=light] #stack .phnav{background:rgba(255,255,255,.86);border-bottom-color:rgba(15,23,42,.08);box-shadow:0 1px 0 rgba(15,23,42,.03)}
+:root[data-theme=light] #stack .phprog{background:linear-gradient(90deg,rgba(88,86,242,0),rgba(88,86,242,.2) 30%,rgba(88,86,242,.2) 70%,rgba(88,86,242,0))}
+:root[data-theme=light] #stack .phprog i{background:#5856F2;box-shadow:0 0 6px rgba(88,86,242,.5)}
+:root[data-theme=light] #stack button:focus-visible{outline-color:rgba(88,86,242,.7)}
+:root[data-theme=light] #stack .phhd::after{background:linear-gradient(90deg,#DCE2EB,rgba(220,226,235,0))}
+:root[data-theme=light] #stack .phspine{box-shadow:0 0 6px rgba(88,86,242,.28);
+  background:linear-gradient(180deg,rgba(28,38,64,.14) 0%,rgba(28,38,64,.35) calc(var(--s1,40%) - 12%),rgba(28,38,64,.8) var(--s1,40%),rgba(28,38,64,.4) var(--s2,55%),rgba(28,38,64,.36) calc(var(--s3,85%) - 8%),rgba(28,38,64,.8) var(--s3,85%),rgba(28,38,64,.55) 100%)}
+:root[data-theme=light] #stack .phpick .mg{background:linear-gradient(135deg,rgb(var(--sc)),rgb(var(--hi)) 90%);border-color:rgba(var(--hi),.5)}
+:root[data-theme=light] #stack .phpick.lit{box-shadow:0 0 0 1px rgba(28,38,64,.55)}
+:root[data-theme=light] #stack .schips .chip.hot{border-color:rgba(28,38,64,.55);box-shadow:0 0 0 1px rgba(28,38,64,.2)}
+:root[data-theme=light] #stack .phsheet .phib.x{background:rgba(28,38,64,.06)}
+:root[data-theme=light] #stack .phsheet .phst.ev{background:rgba(214,138,6,.12);box-shadow:inset 0 0 0 1px rgba(194,120,0,.45)}
+:root[data-theme=light] #stack .phli{border-bottom-color:rgba(52,64,84,.1)}
+:root[data-theme=light] #stack .phli.lit{background:rgba(28,38,64,.05)}
+:root[data-theme=light] #stack .phf.on{border-color:rgba(28,38,64,.28)}
+:root[data-theme=light] #stack .phsearch input{background:#F4F6F9}
+:root[data-theme=light] #stack .phsearch input:focus{border-color:rgba(88,86,242,.5)}
+:root[data-theme=light] #stack .phscrim.on.half{background:rgba(15,23,42,.04)}
+:root[data-theme=light] #stack .phscrim.on.full{background:rgba(15,23,42,.24)}
+:root[data-theme=light] #stack.phside .phsheet{border-color:#D5DCE6;box-shadow:-14px 0 36px rgba(15,23,42,.14)}
+:root[data-theme=light] #stack.phside .phsheet.dockl{box-shadow:14px 0 36px rgba(15,23,42,.14)}
+:root[data-theme=light] #stack .phloupe{background:rgba(255,255,255,.97);border-color:#D5DCE6;box-shadow:0 8px 20px rgba(15,23,42,.14)}
+:root[data-theme=light] #stack .phbay.phping::after{box-shadow:0 0 14px rgba(var(--sc),.3)}
+/* the desktop stock search (tools/terminal_find.css): the field, and its list drawn like the popup */
+:root[data-theme=light] #obFind .obf-f:hover{border-color:#C5CEDB}
+:root[data-theme=light] #obFind.open .obf-f,:root[data-theme=light] #obFind .obf-f:focus-within{border-color:rgba(88,86,242,.5);box-shadow:0 0 0 3px rgba(88,86,242,.1)}
+:root[data-theme=light] #obFind .obf-l{background:rgba(255,255,255,.98);border-color:#D5DCE6;scrollbar-color:rgba(52,64,84,.25) transparent;
+  box-shadow:0 18px 40px rgba(15,23,42,.16),0 0 0 1px rgba(15,23,42,.04),inset 0 1px 0 rgba(255,255,255,.9)}
+:root[data-theme=light] #obFind .obf-r.on{background:rgba(28,38,64,.05)}
+/* the phone's motion layer (tools/terminal_phone_fx.css): replay head, spine comet, sweep band, lock-on flash, packets */
+:root[data-theme=light] #stack .phscan{background:linear-gradient(180deg,transparent,rgba(28,38,64,.45) 12%,rgba(28,38,64,.6) 50%,rgba(28,38,64,.45) 88%,transparent);box-shadow:0 0 8px rgba(88,86,242,.35)}
+:root[data-theme=light] #stack .phscan::before{background:linear-gradient(90deg,transparent,rgba(88,86,242,.07))}
+:root[data-theme=light] #stack .phcomet i{background:linear-gradient(180deg,rgba(88,86,242,0),rgba(88,86,242,.8));filter:drop-shadow(0 0 3px rgba(88,86,242,.45))}
+:root[data-theme=light] #stack .phcomet b{background:#5856F2;box-shadow:0 0 8px 2px rgba(88,86,242,.45)}
+:root[data-theme=light] #stack .phsweep{background:linear-gradient(180deg,rgba(88,86,242,0),rgba(88,86,242,.035) 50%,rgba(88,86,242,0))}
+:root[data-theme=light] #stack .phlock{background:rgba(28,38,64,.08)}
+:root[data-theme=light] #stack .phpk{background:radial-gradient(circle,rgb(var(--sc)) 0 26%,rgba(var(--sc),.55) 48%,rgba(var(--sc),0) 70%)}
+:root[data-theme=light] #stack .phhd .phreplay:active{border-color:rgba(88,86,242,.5)}
+/* the locked preview's Unlock line and Access Locked pill (tools/terminal_locked.css) */
+:root[data-theme=light] .obl-note{border-top-color:rgba(28,38,64,.1)}
+:root[data-theme=light] .obl-note a{color:#5856F2}
+:root[data-theme=light] .ichart .obl-lock{background:rgba(255,255,255,.88);box-shadow:0 0 0 1px rgba(28,38,64,.12),0 6px 18px rgba(15,23,42,.12)}
+:root[data-theme=light] .tile[data-copied="1"],
+:root[data-theme=light] .ticket[data-copied="1"],
+:root[data-theme=light] .anom[data-copied="1"]{outline-color:#0E9F63 !important;box-shadow:0 0 0 1px rgba(14,159,99,.4),0 0 18px rgba(14,159,99,.24) !important}
+:root[data-theme=light] .tile[data-opened="1"],
+:root[data-theme=light] .ticket[data-opened="1"],
+:root[data-theme=light] .anom[data-opened="1"]{outline-color:#3B5BDB !important;box-shadow:0 0 0 1px rgba(59,91,219,.4),0 0 18px rgba(59,91,219,.24) !important}
+:root[data-theme=light] .ob-toast{background:rgba(255,255,255,.97);border-color:rgba(14,159,99,.45);box-shadow:0 16px 36px rgba(15,23,42,.16),0 0 0 1px rgba(15,23,42,.05)}
+:root[data-theme=light] .ob-toast[data-kind="open"]{border-color:rgba(59,91,219,.48)}
+:root[data-theme=light] .ob-toast-ico{background:rgba(14,159,99,.14);color:#087A4A}
+:root[data-theme=light] .ob-toast[data-kind="open"] .ob-toast-ico{background:rgba(59,91,219,.14);color:#364FC7}
+:root[data-theme=light] .ob-toast[data-kind="error"] .ob-toast-ico{background:rgba(226,61,79,.14);color:#C21D3C}
+:root[data-theme=light] .ob-toast-close:hover,:root[data-theme=light] .ob-toast-close:focus-visible{background:rgba(15,23,42,.08)}

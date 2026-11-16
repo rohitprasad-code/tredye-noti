@@ -593,8 +593,8 @@ test('TredyeClient normalizes BUILDUP strings from flow.json feed', async () => 
 
 test('orderblock.html handles 0-bull sectors, pure BULL/BEAR side filters, and BUILDUP OI sign without crashing', () => {
   const vm = require('node:vm');
-  const html = fs.readFileSync(path.join(__dirname, '..', 'src', 'server', 'public', 'orderblock.html'), 'utf8');
-  const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m => m[1]);
+  const { getOrderBlockTestScripts } = require('../src/client/orderblock');
+  const scripts = getOrderBlockTestScripts();
   assert.equal(scripts.length, 3);
   scripts[2] = scripts[2].replace(
     /\}\)\(\);\s*$/,
@@ -739,8 +739,8 @@ test('orderblock.html handles 0-bull sectors, pure BULL/BEAR side filters, and B
 
 test('orderblock.html preserves hover brush and inspector across fetch/rerender updates without flicker', () => {
   const vm = require('node:vm');
-  const html = fs.readFileSync(path.join(__dirname, '..', 'src', 'server', 'public', 'orderblock.html'), 'utf8');
-  const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m => m[1]);
+  const { getOrderBlockTestScripts } = require('../src/client/orderblock');
+  const scripts = getOrderBlockTestScripts();
   assert.equal(scripts.length, 3);
   scripts[2] = scripts[2].replace(
     /\}\)\(\);\s*$/,
@@ -1441,6 +1441,467 @@ test('settings.js resets token validation state cleanly after saving 1-Year Anal
 
   assert.ok(badge && meta && tokenError && saveBtn && disBtn && section);
 });
+
+test('orderblock.html skips redundant rerenders, defers non-selected OHLC arrays, uses compositor inspector transforms, and pauses idle FX cleanly', () => {
+  const vm = require('node:vm');
+  const { getOrderBlockTestScripts } = require('../src/client/orderblock');
+  const scripts = getOrderBlockTestScripts();
+  assert.equal(scripts.length, 3);
+  scripts[2] = scripts[2].replace(
+    /\}\)\(\);\s*$/,
+    '; window.__OB_PERF_TEST = { setM: m => { M = m; }, getM: () => M, getFX: () => FX, buildModel, renderStage, rerender, obSnapDigest, obControlsMount, showInspector, fxLoop, S }; })();'
+  );
+
+  const byId = new Map();
+  const c2dProxy = () =>
+    new Proxy(
+      {
+        measureText: () => ({ width: 20 }),
+        createLinearGradient: () => ({ addColorStop() {} }),
+        createRadialGradient: () => ({ addColorStop() {} }),
+        getImageData: () => ({ data: new Uint8ClampedArray(16) }),
+        font: '',
+      },
+      { get: (t, k) => (k in t ? t[k] : () => {}) }
+    );
+  const mk = (tag, id) => {
+    const cls = new Set();
+    const attrs = new Map();
+    const listeners = new Map();
+    let htmlStr = '';
+    const el = {
+      tagName: String(tag || 'DIV').toUpperCase(),
+      id: id || '',
+      style: { setProperty() {}, getPropertyValue: () => '' },
+      dataset: { vfs: '12' },
+      children: [],
+      parentNode: null,
+      offsetWidth: id === 'inspector' ? 330 : 80,
+      offsetHeight: id === 'inspector' ? 280 : 20,
+      offsetLeft: 0,
+      offsetTop: 0,
+      offsetParent: null,
+      clientWidth: 120,
+      scrollWidth: 60,
+      isConnected: true,
+      classList: {
+        add: (...a) => a.forEach(x => cls.add(x)),
+        remove: (...a) => a.forEach(x => cls.delete(x)),
+        toggle: (x, f) => (f === true ? cls.add(x) : f === false ? cls.delete(x) : cls.has(x) ? (cls.delete(x), false) : (cls.add(x), true)),
+        contains: x => cls.has(x),
+      },
+      set className(v) { cls.clear(); String(v || '').split(/\s+/).filter(Boolean).forEach(x => cls.add(x)); },
+      get className() { return [...cls].join(' '); },
+      set innerHTML(v) { htmlStr = String(v || ''); if (!htmlStr) this.children = []; },
+      get innerHTML() { return htmlStr; },
+      setAttribute(k, v) { attrs.set(k, String(v)); if (k.startsWith('data-')) el.dataset[k.slice(5)] = String(v); },
+      getAttribute: k => (attrs.has(k) ? attrs.get(k) : null),
+      hasAttribute: k => attrs.has(k),
+      removeAttribute: k => attrs.delete(k),
+      addEventListener: (t, fn) => { if (!listeners.has(t)) listeners.set(t, []); listeners.get(t).push(fn); },
+      dispatchEvent: ev => { ev.target = ev.target || el; (listeners.get(ev.type) || []).forEach(fn => fn(ev)); },
+      appendChild(c) { c.parentNode = el; this.children.push(c); if (c.id) byId.set(c.id, c); return c; },
+      insertBefore(c) { c.parentNode = el; this.children.unshift(c); if (c.id) byId.set(c.id, c); return c; },
+      remove() {},
+      closest() { return null; },
+      querySelector(sel) {
+        if (sel.startsWith('#')) return byId.get(sel.slice(1)) || null;
+        return this.children[0] || mk('div');
+      },
+      querySelectorAll: sel => (sel === '.obc-pill' ? [] : []),
+      getBoundingClientRect: () => ({ left: 0, top: 0, width: 1920, height: 1080 }),
+      getContext: () => c2dProxy(),
+    };
+    if (id) byId.set(id, el);
+    return el;
+  };
+
+  const stage = mk('div', 'stage');
+  ['crest', 'plumeWrap', 'chips', 'idxTags', 'ladderWrap', 'nodes', 'tiles', 'bridges', 'tickets', 'fxWrap', 'inspector', 'footer'].forEach(id => stage.appendChild(mk('div', id)));
+  const topBar = mk('header', 'obTopBar');
+  const motionBtn = mk('button', 'obMotionBtn');
+  topBar.appendChild(motionBtn);
+  ['obSecSel', 'obSortSel', 'obSyncBtn', 'obLiveClock'].forEach(id => topBar.appendChild(mk('div', id)));
+
+  const gsapCalls = [];
+  const rafQueue = [];
+  const ctx = vm.createContext({
+    location: { search: '', origin: 'http://localhost:4600' },
+    innerWidth: 2100,
+    innerHeight: 1200,
+    CSS: { escape: s => String(s) },
+    gsap: {
+      set(el, props) { gsapCalls.push({ kind: 'set', el, props }); },
+      to(el, props) { gsapCalls.push({ kind: 'to', el, props }); },
+      fromTo() {},
+    },
+    matchMedia: () => ({ matches: false, addEventListener() {} }),
+    addEventListener() {},
+    removeEventListener() {},
+    CanvasRenderingContext2D: Object.assign(function () {}, {
+      prototype: { fillStyle: '', strokeStyle: '', globalCompositeOperation: 'source-over', createLinearGradient() {}, createRadialGradient() {} },
+    }),
+    CanvasGradient: Object.assign(function () {}, { prototype: { addColorStop() {} } }),
+    history: { replaceState() {} },
+    document: {
+      documentElement: mk('html'),
+      body: mk('body'),
+      hidden: false,
+      createElement: t => mk(t),
+      getElementById: id => byId.get(id) || mk('div', id),
+      querySelector: sel => (sel === '#stage' ? stage : sel.startsWith('#') ? byId.get(sel.slice(1)) || null : null),
+      querySelectorAll: () => [],
+      addEventListener() {},
+      readyState: 'complete',
+    },
+    localStorage: { getItem: () => null, setItem() {} },
+    navigator: { userAgent: 'node' },
+    URLSearchParams,
+    EventSource: function () { return { addEventListener() {} }; },
+    fetch: async () => ({ ok: true, json: async () => ({}) }),
+    requestAnimationFrame: fn => { rafQueue.push(fn); return rafQueue.length; },
+    getComputedStyle: () => ({ fontSize: '12px', getPropertyValue: () => '' }),
+    performance: { now: () => 2000 },
+    Math, Date, Number, String, Array, Object, Set, Map, Float32Array, Float64Array, Int32Array, JSON, Error, RegExp, console, Promise,
+    setTimeout() {}, clearTimeout() {}, setInterval() {}, clearInterval() {},
+  });
+  ctx.window = ctx; ctx.self = ctx;
+  for (const sc of scripts) vm.runInContext(sc, ctx);
+
+  const api = ctx.__OB_PERF_TEST;
+  const snap1 = {
+    meta: { status: 'live', clock: '13:10:00', el: 240, open: '09:15', close: '15:30', counts: { all: 6, bull: 5, bear: 1 }, filter: { sector: 'ALL', side: 'ALL', sort: 'MAX_GAINS' } },
+    sectors: [{ sec: 'IT', chg: 1.8, adv: 3, n: 3 }, { sec: 'BANK', chg: 0.4, adv: 1, n: 1 }, { sec: 'ENERGY', chg: 1.2, adv: 1, n: 1 }, { sec: 'POWER', chg: -1.4, adv: 0, n: 1 }],
+    stocks: [
+      { s: 'INFY', n: 'Infosys', sec: 'IT', g: 'bull', c: 2.8, cp: 2.8, p: 0.96, o: 1800, l: 1850.4, top: true, fo: true, w: 1.2, bu: 'LONG BUILD-UP', setupScore: 88, flowAgree: 5 },
+      { s: 'TCS', n: 'TCS', sec: 'IT', g: 'bull', c: 2.4, cp: 2.4, p: 0.92, o: 3900, l: 3993.6, top: true, fo: true, w: 1.1, bu: 'LONG BUILD-UP', setupScore: 84, flowAgree: 5 },
+      { s: 'RELIANCE', n: 'Reliance', sec: 'ENERGY', g: 'bull', c: 2.0, cp: 2.0, p: 0.88, o: 2900, l: 2958, top: true, fo: true, w: 1.0, bu: 'LONG BUILD-UP', setupScore: 80, flowAgree: 4 },
+      { s: 'WIPRO', n: 'Wipro', sec: 'IT', g: 'bull', c: 1.5, cp: 1.5, p: 0.80, o: 550, l: 558.25, top: true, fo: true, w: 0.9, bu: 'LONG BUILD-UP', setupScore: 74, flowAgree: 4 },
+      { s: 'HDFCBANK', n: 'HDFC Bank', sec: 'BANK', g: 'bull', c: 0.4, cp: 0.4, p: 0.55, o: 1700, l: 1706.8, top: false, fo: true, w: 0.8, bu: 'LONG BUILD-UP', setupScore: 50, flowAgree: 3 },
+      { s: 'POWERGRID', n: 'Power Grid', sec: 'POWER', g: 'bear', c: -1.4, cp: -1.4, p: 0.12, o: 300, l: 295.8, top: true, fo: true, w: 1.1, bu: 'SHORT BUILD-UP', setupScore: 76, flowAgree: 4 },
+    ],
+  };
+
+  const m1 = api.buildModel(snap1);
+  m1._sig = api.obSnapDigest(snap1);
+  api.setM(m1);
+  api.renderStage();
+
+  assert.equal(m1.bySym.INFY._hasOhlc, true, 'selected stock prebuilds OHLC arrays');
+  assert.equal(m1.bySym.HDFCBANK._hasOhlc, false, 'non-selected stock skips OHLC array allocations upfront');
+  assert.equal(m1.bySym.HDFCBANK.O, undefined);
+  assert.ok(m1.bySym.HDFCBANK.vwapEnd > 0 && m1.bySym.HDFCBANK.volTot > 0, 'scalar metrics still computed accurately');
+
+  // Hovering a non-selected stock lazily computes OHLC arrays cleanly without throwing
+  assert.doesNotThrow(() => api.showInspector(m1.bySym.HDFCBANK, { clientX: 600, clientY: 300 }));
+  assert.equal(m1.bySym.HDFCBANK._hasOhlc, true);
+  assert.ok(ArrayBuffer.isView(m1.bySym.HDFCBANK.vwap));
+
+  // Verify inspector uses compositor x/y transforms rather than animating left/top
+  const firstSet = gsapCalls.find(c => c.kind === 'set');
+  assert.ok(firstSet && typeof firstSet.props.x === 'number' && typeof firstSet.props.y === 'number');
+  api.showInspector(m1.bySym.INFY, { clientX: 900, clientY: 400 });
+  const moveTo = gsapCalls.filter(c => c.kind === 'to').at(-1);
+  assert.equal('left' in moveTo.props, false, 'placeInspector must animate x/y transform, not layout left/top');
+  assert.equal('top' in moveTo.props, false);
+
+  // Feed identical digest (clock-only tick) -> M reference preserved, no heavy rebuild
+  const snapSame = { ...snap1, meta: { ...snap1.meta, clock: '13:11:00' } };
+  ctx.OBF_FEED.onUpdate(snapSame);
+  assert.equal(api.getM(), m1, 'unchanged snapshot digest must skip full rebuild');
+
+  // Feed changed LTP -> M rebuilt cleanly
+  const snapChanged = {
+    ...snap1,
+    stocks: [{ ...snap1.stocks[0], l: 1862.0 }, ...snap1.stocks.slice(1)],
+  };
+  ctx.OBF_FEED.onUpdate(snapChanged);
+  assert.notEqual(api.getM(), m1, 'changed stock price must trigger model rebuild');
+
+  // Toggle Pause FX button -> toggles fx-paused, updates label without aria-pressed, and halts idle fxLoop
+  assert.equal(motionBtn.hasAttribute('aria-pressed'), false);
+  motionBtn.dispatchEvent({ type: 'click' });
+  assert.equal(api.getFX().userPaused, true);
+  assert.equal(ctx.document.body.classList.contains('fx-paused'), true);
+  assert.equal(motionBtn.textContent, 'Play FX');
+  api.getFX().hover = null;
+  api.getFX().pinned = null;
+  api.getFX().flashes = [];
+  api.getFX().packets = [];
+  api.getFX().dirty = false;
+  api.fxLoop(2100);
+  assert.equal(api.getFX().running, false, 'idle fxLoop must halt cleanly when paused');
+});
+
+test('modular architecture, fonts bundle, external CSS/JS bundles, and dark-mode zero-overhead Canvas2D descriptors work cleanly', () => {
+  const vm = require('node:vm');
+  const { getFontsBundleCss } = require('../src/server/fonts-bundle');
+  const {
+    DARK_CSS_FILES,
+    STAGE_JS_MODULES,
+    getOrderBlockCssBundle,
+    getOrderBlockLightCss,
+    getOrderBlockJsBundle,
+    getOrderBlockTestScripts,
+  } = require('../src/client/orderblock');
+
+  // 1) HTML shells are lightweight and use external cached bundles + defer scripts
+  const obHtml = fs.readFileSync(path.join(__dirname, '..', 'src', 'server', 'public', 'orderblock.html'), 'utf8');
+  assert.ok(Buffer.byteLength(obHtml, 'utf8') < 10_000, 'orderblock.html shell must be under 10 KB');
+  assert.ok(obHtml.includes('/vendor/fonts.css'));
+  assert.ok(obHtml.includes('/static/ob/orderblock.css'));
+  assert.ok(obHtml.includes('<script defer src="/vendor/gsap.min.js"></script>'));
+  assert.ok(obHtml.includes('<script defer src="/static/ob/orderblock.js"></script>'));
+
+  // 2) Fonts bundle combines @fontsource rules into a single stylesheet with font-display: swap
+  const fontsCss = getFontsBundleCss();
+  assert.ok(fontsCss.includes('@font-face'));
+  assert.ok(fontsCss.includes('font-display: swap;'));
+  assert.ok(fontsCss.includes('/vendor/fonts/inter-tight/files/'));
+
+  // 3) Modular CSS & JS bundles assemble all expected files
+  assert.equal(DARK_CSS_FILES.length, 3);
+  assert.equal(STAGE_JS_MODULES.length, 6);
+  assert.ok(getOrderBlockCssBundle().length > 20_000);
+  assert.ok(getOrderBlockLightCss().length > 5_000);
+  assert.ok(getOrderBlockJsBundle().length > 100_000);
+
+  // 4) Dark mode preserves native CanvasRenderingContext2D descriptors; light mode hooks and unhooks cleanly
+  const [themeScript] = getOrderBlockTestScripts();
+  const nativeSetter = function (v) { this._fill = v; };
+  const nativeGetter = function () { return this._fill; };
+  const proto = {};
+  Object.defineProperty(proto, 'fillStyle', {
+    configurable: true,
+    enumerable: true,
+    get: nativeGetter,
+    set: nativeSetter,
+  });
+  Object.defineProperty(proto, 'strokeStyle', {
+    configurable: true,
+    enumerable: true,
+    get: nativeGetter,
+    set: nativeSetter,
+  });
+  Object.defineProperty(proto, 'shadowColor', {
+    configurable: true,
+    enumerable: true,
+    get: nativeGetter,
+    set: nativeSetter,
+  });
+  Object.defineProperty(proto, 'globalCompositeOperation', {
+    configurable: true,
+    enumerable: true,
+    get() { return 'source-over'; },
+    set() {},
+  });
+  proto.createLinearGradient = function () { return {}; };
+  proto.createRadialGradient = function () { return {}; };
+
+  let msgHandler = null;
+  const ctx = vm.createContext({
+    location: { origin: 'http://localhost:4600' },
+    document: {
+      cookie: 'ob_theme=dark',
+      documentElement: { setAttribute() {}, getAttribute: () => 'dark' },
+    },
+    matchMedia: () => ({ matches: true, addEventListener() {} }),
+    addEventListener(type, fn) { if (type === 'message') msgHandler = fn; },
+    dispatchEvent() {},
+    Event: function (t) { this.type = t; },
+    CanvasRenderingContext2D: { prototype: proto },
+    CanvasGradient: { prototype: { addColorStop() {} } },
+    Map, Math, Object, Array, String, Number, RegExp, parseInt,
+  });
+  ctx.window = ctx;
+  ctx.window.parent = ctx;
+  vm.runInContext(themeScript, ctx);
+
+  // In dark mode, native setter must remain untouched (zero interceptor overhead)
+  assert.equal(Object.getOwnPropertyDescriptor(proto, 'fillStyle').set, nativeSetter);
+
+  // Switching to light mode installs the color-remapping setter
+  msgHandler({ origin: 'http://localhost:4600', data: { t: 'ob-theme', theme: 'light' } });
+  assert.notEqual(Object.getOwnPropertyDescriptor(proto, 'fillStyle').set, nativeSetter);
+
+  // Switching back to dark mode restores the native setter
+  msgHandler({ origin: 'http://localhost:4600', data: { t: 'ob-theme', theme: 'dark' } });
+  assert.equal(Object.getOwnPropertyDescriptor(proto, 'fillStyle').set, nativeSetter);
+});
+
+test('theme defaults to browser preference with no initial cookie and writes ob_theme cookie only on modification', () => {
+  const vm = require('node:vm');
+  const { getOrderBlockCssBundle, getOrderBlockLightCss, getOrderBlockTestScripts } = require('../src/client/orderblock');
+  const navRailSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'server', 'public', 'nav-rail.js'), 'utf8');
+  const [themeScript] = getOrderBlockTestScripts();
+
+  // 1) CSS checks: Top Bar, Side Rail, Inspector + ichart have Light Mode styling without blocking !important overrides
+  const darkCss = getOrderBlockCssBundle();
+  const lightCss = getOrderBlockLightCss();
+  assert.ok(darkCss.includes(':root[data-theme=light] .ob-side-rail .rt-btn.on'));
+  assert.ok(darkCss.includes(':root[data-theme=light] .obc-pills'));
+  assert.ok(darkCss.includes(':root[data-theme=light] .obc-group select'));
+  assert.ok(darkCss.includes(':root[data-theme=light] #obFindHost #obFind .obf-f'));
+  assert.ok(darkCss.includes(':root[data-theme=light] .ob-live-status'));
+  assert.ok(!/^\s*#inspector\s*\{[^}]*background:\s*rgba\(10,\s*16,\s*26[^;]*!important/m.test(darkCss));
+  assert.ok(lightCss.includes(':root[data-theme=light] #inspector .ichart'));
+  assert.ok(lightCss.includes(':root[data-theme=light] #inspector .h .t'));
+  assert.ok(lightCss.includes(':root[data-theme=light] #inspector .row.px .lp'));
+
+  // 2) OrderBlock theme module: browser Light preference -> initializes light with NO cookie written
+  const makeCookieJar = () => {
+    const store = new Map();
+    return {
+      store,
+      get() {
+        return [...store.entries()].map(([k, v]) => `${k}=${v}`).join('; ');
+      },
+      set(raw) {
+        const str = String(raw || '');
+        const [pair, ...attrs] = str.split(';').map(s => s.trim());
+        const eq = pair.indexOf('=');
+        if (eq < 0) return;
+        const k = pair.slice(0, eq).trim();
+        const v = pair.slice(eq + 1).trim();
+        const maxAgeZero = attrs.some(a => /^max-age=0$/i.test(a));
+        if (maxAgeZero || !v) store.delete(k);
+        else store.set(k, v);
+      },
+    };
+  };
+
+  let sysIsLight = true;
+  const mqListeners = [];
+  const jar1 = makeCookieJar();
+  const meta1 = { content: 'light dark' };
+  const attrs1 = new Map();
+  const ctx1 = vm.createContext({
+    location: { origin: 'http://localhost:4600' },
+    document: {
+      get cookie() { return jar1.get(); },
+      set cookie(v) { jar1.set(v); },
+      documentElement: {
+        style: {},
+        setAttribute: (k, v) => attrs1.set(k, v),
+        getAttribute: k => attrs1.get(k) || null,
+      },
+      querySelector: sel => (sel === 'meta[name="color-scheme"]' ? meta1 : null),
+      querySelectorAll: () => [],
+    },
+    matchMedia: q => ({
+      get matches() { return q.includes('light') ? sysIsLight : !sysIsLight; },
+      addEventListener: (_t, fn) => mqListeners.push(fn),
+    }),
+    addEventListener() {},
+    dispatchEvent() {},
+    Event: function (t) { this.type = t; },
+    CanvasRenderingContext2D: { prototype: {} },
+    CanvasGradient: { prototype: { addColorStop() {} } },
+    Map, Math, Object, Array, String, Number, RegExp, parseInt,
+  });
+  ctx1.window = ctx1;
+  ctx1.window.parent = ctx1;
+  vm.runInContext(themeScript, ctx1);
+
+  assert.equal(attrs1.get('data-theme'), 'light');
+  assert.equal(jar1.store.has('ob_theme'), false, 'initial load must not write ob_theme cookie');
+  assert.equal(meta1.content, 'light dark');
+
+  // OS switches to dark while no cookie override is present -> follows browser automatically
+  sysIsLight = false;
+  mqListeners.forEach(fn => fn());
+  assert.equal(attrs1.get('data-theme'), 'dark');
+  assert.equal(jar1.store.has('ob_theme'), false);
+
+  // 3) NavRail module: follows browser light default, cookies only on modification, clears when reverted
+  let railLight = true;
+  const jar2 = makeCookieJar();
+  const meta2 = { content: 'light dark' };
+  const attrs2 = new Map();
+  const railBtns = [
+    {
+      dataset: { themeSet: 'light' },
+      classes: new Set(),
+      attrs: new Map(),
+      listeners: new Map(),
+      getAttribute: k => (k === 'data-theme-set' ? 'light' : null),
+      setAttribute(k, v) { this.attrs.set(k, v); },
+      classList: { toggle(c, f) { if (f) railBtns[0].classes.add(c); else railBtns[0].classes.delete(c); } },
+      addEventListener(t, fn) { this.listeners.set(t, fn); },
+    },
+    {
+      dataset: { themeSet: 'dark' },
+      classes: new Set(),
+      attrs: new Map(),
+      listeners: new Map(),
+      getAttribute: k => (k === 'data-theme-set' ? 'dark' : null),
+      setAttribute(k, v) { this.attrs.set(k, v); },
+      classList: { toggle(c, f) { if (f) railBtns[1].classes.add(c); else railBtns[1].classes.delete(c); } },
+      addEventListener(t, fn) { this.listeners.set(t, fn); },
+    },
+  ];
+  const makeAside = () => ({
+    className: '',
+    id: '',
+    offsetWidth: 54,
+    setAttribute() {},
+    querySelectorAll: sel => (sel === '.rt-btn' ? railBtns : []),
+  });
+  let asideEl = null;
+  const ctx2 = vm.createContext({
+    location: { pathname: '/app/settings' },
+    document: {
+      readyState: 'complete',
+      get cookie() { return jar2.get(); },
+      set cookie(v) { jar2.set(v); },
+      documentElement: {
+        style: { setProperty() {} },
+        setAttribute: (k, v) => attrs2.set(k, v),
+        getAttribute: k => attrs2.get(k) || null,
+      },
+      body: {
+        firstChild: null,
+        classList: { contains: c => c === 'has-ob-rail', toggle() { return false; } },
+        insertBefore(el) { asideEl = el; },
+      },
+      createElement: () => makeAside(),
+      getElementById: () => null,
+      querySelector: sel => (sel === 'meta[name="color-scheme"]' ? meta2 : null),
+      querySelectorAll: sel => (sel === '#obSideRail .rt-btn' ? railBtns : []),
+      addEventListener() {},
+    },
+    localStorage: { removeItem() {} },
+    matchMedia: q => ({
+      matches: q.includes('light') ? railLight : !railLight,
+      addEventListener() {},
+    }),
+    requestAnimationFrame() {},
+  });
+  ctx2.window = ctx2;
+  vm.runInContext(navRailSrc, ctx2);
+
+  assert.ok(asideEl);
+  assert.equal(attrs2.get('data-theme'), 'light', 'Settings defaults to browser light preference');
+  assert.equal(jar2.store.has('ob_theme'), false, 'no cookie written before modification');
+
+  // Click Light (already matches browser) -> still no cookie
+  railBtns[0].listeners.get('click')();
+  assert.equal(jar2.store.has('ob_theme'), false);
+
+  // Click Dark (modified from browser Light default) -> writes ob_theme=dark cookie
+  railBtns[1].listeners.get('click')();
+  assert.equal(attrs2.get('data-theme'), 'dark');
+  assert.equal(jar2.store.get('ob_theme'), 'dark');
+  assert.equal(meta2.content, 'dark');
+
+  // Click back to Light (matches browser default again) -> removes override cookie
+  railBtns[0].listeners.get('click')();
+  assert.equal(attrs2.get('data-theme'), 'light');
+  assert.equal(jar2.store.has('ob_theme'), false);
+  assert.equal(meta2.content, 'light dark');
+});
+
+
 
 
 

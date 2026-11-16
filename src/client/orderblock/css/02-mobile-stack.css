@@ -1,0 +1,474 @@
+/* ================= stacked (phone / portrait) layout: the vertical pipeline =================
+   Injected by tools/patch_terminal.py at the end of the page's main <style> (after 02.html's own rules, so it wins);
+   the light layer (tools/terminal_light.html) is appended after it. Everything is scoped to html.stacked / #stack, so
+   the desktop stage and the Home peek frame (never stacked) are untouched. Text floor: 10px real. */
+
+/* the page scrolls: html must not keep overflow:hidden (it goes to the viewport and nothing would scroll) */
+html.stacked{height:auto;overflow:visible;overscroll-behavior-y:contain;-webkit-text-size-adjust:100%;text-size-adjust:100%;overflow-anchor:none}
+html.stacked body.stacked{height:auto;min-height:100%;overflow-anchor:none}
+body.stacked #stack{max-width:none;margin:0;padding:0;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none}
+#stack button{font:inherit;color:inherit;margin:0;-webkit-appearance:none;appearance:none;-webkit-tap-highlight-color:transparent}
+#stack button:focus{outline:none}
+#stack button:focus-visible{outline:2px solid rgba(169,184,255,.8);outline-offset:1px}
+
+/* ---------- station nav (sticky) ---------- */
+#stack .phnav{position:sticky;top:0;z-index:40;height:44px;background:rgba(10,15,23,.82);-webkit-backdrop-filter:blur(12px) saturate(1.4);backdrop-filter:blur(12px) saturate(1.4);border-bottom:1px solid var(--hair)}
+#stack .phnavin{position:relative;max-width:760px;height:100%;margin:0 auto;display:flex;align-items:stretch;padding:0 4px 0 12px;box-sizing:border-box}
+#stack .phn{position:relative;flex:1 1 0;min-width:44px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:0 2px;background:none;border:0;color:var(--ink-3);cursor:pointer;transition:color .2s}
+#stack .phn .c{display:flex;align-items:center;gap:3px;font:700 10px/1 var(--f-ui);letter-spacing:.1em;white-space:nowrap}
+#stack .phn .n{font:600 12.5px/1 var(--f-num);font-variant-numeric:tabular-nums;color:var(--ink-2);letter-spacing:.01em}
+#stack .phn .tri{width:7px;height:7px;fill:currentColor;flex:none}
+#stack .phn.up .tri,#stack .phn.up .n{color:var(--bull)}
+#stack .phn.dn .tri,#stack .phn.dn .n{color:var(--bear)}
+#stack .phn .bd{display:flex;gap:1px;width:34px;height:3px;border-radius:2px;overflow:hidden}
+#stack .phn .bd i{display:block;height:100%;flex:1}
+#stack .phn .bd .b{background:var(--bull)} #stack .phn .bd .r{background:var(--bear)}
+#stack .phn::after{content:"";position:absolute;left:22%;right:22%;bottom:0;height:2px;border-radius:2px 2px 0 0;background:var(--ink-2);opacity:0;transform:scaleX(.3);transition:opacity .2s,transform .28s var(--ease)}
+#stack .phn.up::after{background:var(--bull)} #stack .phn.dn::after{background:var(--bear)}
+#stack .phn.on{color:var(--ink)}
+#stack .phn.on::after{opacity:1;transform:none}
+#stack .phn.find{flex:0 0 44px}
+#stack .phn.find svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round}
+#stack .phprog{position:absolute;left:0;right:0;bottom:-1px;height:1px;background:linear-gradient(90deg,rgba(169,184,255,0),rgba(169,184,255,.22) 30%,rgba(169,184,255,.22) 70%,rgba(169,184,255,0));pointer-events:none}
+#stack .phprog i{position:absolute;left:0;top:-1.5px;width:8px;height:4px;border-radius:2px;background:#fff;box-shadow:0 0 6px rgba(169,184,255,.9);will-change:transform}
+
+/* ---------- page, rebuild holder, sections ---------- */
+#stack .phpage{position:relative;max-width:760px;margin:0 auto;padding:0 12px 0 26px;box-sizing:border-box}
+#stack .phnext{position:relative;height:0;overflow:hidden;visibility:hidden;pointer-events:none}
+#stack .phbody{position:relative;padding-top:12px}
+#stack .phsec{position:relative;margin:0 0 22px}
+#stack .phhd{display:flex;align-items:center;gap:8px;height:26px;margin:0 0 8px;white-space:nowrap}
+#stack .phhd b{display:flex;align-items:center;gap:5px;font:800 11px/1 var(--f-ui);letter-spacing:.16em;color:var(--ink)}
+#stack .phhd span{font:600 10px/1 var(--f-ui);letter-spacing:.1em;color:var(--ink-3);overflow:hidden;text-overflow:ellipsis}
+#stack .phhd::after{content:"";flex:1 1 12px;min-width:12px;height:1px;background:linear-gradient(90deg,var(--hair),rgba(26,36,51,0))}
+#stack .phhd .tri{width:8px;height:8px;fill:currentColor}
+#stack .phhd.up b{color:var(--bull-hi)} #stack .phhd.dn b{color:var(--bear-hi)}
+#stack .phhd.set{margin-top:18px}
+#stack .phhd .ev{color:var(--amber)}
+
+/* ---------- spine, station nodes, count badges ---------- */
+#stack .phspine{position:absolute;left:-14px;width:2px;bottom:auto;overflow:visible;pointer-events:none;z-index:1;
+  background:linear-gradient(180deg,rgba(232,241,255,.2) 0%,rgba(232,241,255,.45) calc(var(--s1,40%) - 12%),rgba(232,241,255,.95) var(--s1,40%),rgba(232,241,255,.55) var(--s2,55%),rgba(232,241,255,.5) calc(var(--s3,85%) - 8%),rgba(232,241,255,.95) var(--s3,85%),rgba(232,241,255,.75) 100%);
+  box-shadow:0 0 8px rgba(169,184,255,.45)}
+#stack .phnode{position:absolute;left:-13px;z-index:2;width:9px;height:9px}
+#stack .phnode.dia{width:7px;height:7px}
+#stack .phnode.beacon{width:7px;height:7px}
+#stack .phnode.set{width:11px;height:11px}
+#stack .phnode .ring{width:7px;height:7px}
+#stack .phcnt{position:absolute;width:auto;height:auto;padding:0;margin:0;border:0;background:none;pointer-events:auto;cursor:pointer;z-index:5;transform:none}
+#stack .phcnt b{position:relative;left:auto;top:auto;right:auto;bottom:auto;display:block;transform:none}
+#stack .phcnt::after{content:"";position:absolute;left:50%;top:50%;width:max(100%,40px);height:max(100%,40px);transform:translate(-50%,-50%)}
+#stack .phncnt{left:-13px;transform:translateX(-50%)}
+#stack .phcap{position:absolute;width:auto;height:auto;pointer-events:none;z-index:4}
+#stack .phcap b{position:relative;left:auto;top:auto;right:auto;bottom:auto;display:block}
+#stack.brush .phspine,#stack.brush .phnode{opacity:.4}
+
+/* ---------- MARKET: crest, the six setups, sectors ---------- */
+#stack .phcrest{position:relative;margin:0 0 16px;touch-action:pan-y;cursor:crosshair}
+#stack .pulse .pcount .k{font-size:10px;letter-spacing:.12em}
+#stack .pulse .ptag{cursor:pointer}
+#stack .pulse .ptag .k{font-size:10px;letter-spacing:.1em}
+#stack .pulse .ptag b{font-size:13px}
+#stack .pulse .ptag .v{font-size:11px}
+#stack .phrail{margin:0 0 18px}
+#stack .phrailhd{display:flex;align-items:center;gap:6px;height:40px;margin:0 0 6px;white-space:nowrap}
+#stack .phreact{position:relative!important;width:40px;height:40px;flex:none;margin-left:-6px}
+#stack .phreact>*{margin:20px 0 0 20px}
+#stack .phrailhd .phcnt{position:relative}
+#stack .phrailhd .k{font:800 11px/1 var(--f-ui);letter-spacing:.16em;color:var(--ink);margin-left:4px}
+#stack .phrailhd .sub{margin-left:auto;font:600 10px/1 var(--f-ui);letter-spacing:.06em;color:var(--ink-3);overflow:hidden;text-overflow:ellipsis}
+#stack .phrailg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+#stack .phbody.wide:not(.r3) .phrailg{grid-template-columns:repeat(6,minmax(0,1fr))}   /* short frames under 700: the rail stays 3-across */
+#stack .phpick{position:relative;display:flex;align-items:center;gap:7px;height:48px;min-width:0;padding:0 8px 0 7px;border-radius:8px;text-align:left;cursor:pointer;overflow:hidden;
+  border:1px solid rgba(var(--sc),.38);background:linear-gradient(135deg,rgba(var(--sc),.17),rgba(var(--sc),.04) 72%),var(--panel);transition:opacity .14s,box-shadow .14s}
+#stack .phpick .mg{position:relative;width:26px;height:26px;flex:none;border-radius:6px;display:flex;align-items:center;justify-content:center;font:700 12px/1 var(--f-tk);color:#fff;
+  background:linear-gradient(135deg,rgba(var(--sc),.5),rgba(10,15,23,.92) 85%);border:1px solid rgba(var(--sc),.5);overflow:hidden}
+#stack .phpick .tw{display:flex;flex-direction:column;gap:4px;min-width:0}
+#stack .phpick .tk{display:block;font:700 15px/1 var(--f-tk);letter-spacing:.01em;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#stack .phpick .ln{display:flex;align-items:baseline;gap:5px;white-space:nowrap}
+#stack .phpick .pc{font:600 11px/1 var(--f-num);font-variant-numeric:tabular-nums;color:rgb(var(--hi));letter-spacing:-.01em}
+#stack .phpick .rk{font:700 10px/1 var(--f-num);color:var(--ink-3)}
+#stack .phpick.lit{box-shadow:0 0 0 1px rgba(232,241,255,.7)}
+#stack .phsecs .phsub{display:flex;align-items:baseline;gap:6px;margin:0 0 8px;font:700 10px/1 var(--f-ui);letter-spacing:.14em;color:var(--ink-3)}
+#stack .phsecs .phsub b{font-weight:800;color:var(--ink-2)}
+#stack .phsecs .phsub span{font-family:var(--f-num);letter-spacing:0}
+#stack .phsecs .schips{gap:6px;margin:0}
+#stack .schips .chip{display:flex;flex-direction:column;justify-content:flex-start;align-items:stretch;width:100%;height:36px;padding:7px 7px 0;opacity:1;text-align:left;cursor:pointer;transition:opacity .14s,border-color .14s,box-shadow .14s}
+#stack .schips .chip .r1{display:flex;justify-content:space-between;align-items:baseline;gap:6px;overflow:hidden;line-height:1}
+#stack .schips .chip .cap{font-size:10px;letter-spacing:.07em;white-space:nowrap}
+#stack .schips .chip .v{font-size:11px;white-space:nowrap}
+#stack .schips .chip .strip{left:7px;right:7px;bottom:6px;height:5px}
+#stack .schips .chip.hot{border-color:rgba(232,241,255,.6);box-shadow:0 0 0 1px rgba(232,241,255,.3)}
+#stack.brush .schips .chip:not(.hot){opacity:.35}
+
+/* ---------- FLOW composite ---------- */
+#stack .phflow{position:relative;margin:0;touch-action:manipulation}
+#stack .phfw{position:absolute;left:0;top:0;right:0;bottom:0;pointer-events:none}
+#stack .phzs,#stack .phov{position:absolute;pointer-events:none}
+#stack .phov{z-index:3}
+#stack .phflow .node{z-index:4;pointer-events:none}
+#stack .phnowglow{width:28px;margin-left:-14px;pointer-events:none}
+#stack .phnow{pointer-events:none}
+#stack .phaxis{position:absolute;left:0;top:0;pointer-events:none}
+#stack .phaxis .lb{position:absolute;font:500 10px/12px var(--f-num);font-variant-numeric:tabular-nums;color:var(--ink-3);white-space:nowrap}
+#stack .phaxis .lb.z{color:var(--ink);font-weight:700}
+#stack .phaxis .lb.mi{opacity:.72}
+#stack .phaxis svg{position:absolute;left:0;top:0;overflow:visible}
+#stack .phaxis path{fill:none;stroke:var(--ink-3);stroke-width:1;opacity:.55}
+#stack .phhours{position:absolute;left:0;right:0;height:13px;pointer-events:none}
+#stack .phhours span{position:absolute;top:0;text-align:center;font:500 10px/12px var(--f-num);font-variant-numeric:tabular-nums;color:var(--ink-3);white-space:nowrap}
+#stack .phhours span.now{color:var(--ink);font-weight:700}
+#stack .phhours i{position:absolute;top:-6px;width:1px;height:4px;background:var(--ink-4)}
+#stack .phcrash{position:absolute;font:700 10px/1 var(--f-num);color:var(--amber);white-space:nowrap;pointer-events:none;z-index:4}
+#stack .phwin{position:absolute;display:flex;align-items:center;gap:3px;font:700 10px/1 var(--f-ui);letter-spacing:.03em;white-space:nowrap;pointer-events:none;z-index:4}
+#stack .phwin .tri{width:7px;height:7px;fill:currentColor}
+#stack .phwin.up{color:var(--bull-hi)} #stack .phwin.dn{color:var(--bear-hi)}
+#stack .phflow .gwin{z-index:2}
+#stack.brush .gwin{opacity:.35}
+
+/* ---------- branches: lens band, tiers in echo brackets ---------- */
+#stack .phlens{position:relative;margin:0 0 10px;pointer-events:none}
+#stack .phlens canvas{position:absolute;left:0;top:0}
+#stack .phtiers{position:relative}
+#stack .phtier{position:relative;margin:0 0 14px}
+#stack .phthd{display:flex;justify-content:space-between;align-items:baseline;height:12px;margin:0 2px 9px;font:700 10px/1 var(--f-ui);letter-spacing:.14em;color:var(--ink-3)}
+#stack .phthd .n{font:600 10px/1 var(--f-num);letter-spacing:0}
+#stack .phtb{position:relative;display:flex;flex-direction:column;gap:6px}
+#stack .phrow{display:grid;gap:6px;justify-content:center}
+#stack .phcell{position:relative;min-width:0}
+#stack .phecho{position:absolute;width:16px;height:16px;border:0 solid rgba(var(--sc),.8);pointer-events:none}
+#stack .phecho.tl{left:-5px;top:-5px;border-left-width:2px;border-top-width:2px}
+#stack .phecho.tr{right:-5px;top:-5px;border-right-width:2px;border-top-width:2px}
+#stack .phecho.bl{left:-5px;bottom:-5px;border-left-width:2px;border-bottom-width:2px}
+#stack .phecho.br{right:-5px;bottom:-5px;border-right-width:2px;border-bottom-width:2px}
+#stack .tile .rk{font-size:10px!important}
+#stack .tile .seccap{font-size:10px!important}
+#stack .ticket .nm .nms{font-size:1em}
+#stack .chart .ob .t{font-size:10px}
+#stack .anom .aid .sub{font-size:10px}
+#stack .anom .ch{font-size:10px}
+#stack.brush .phecho{opacity:.35}
+
+/* ---------- setup bays ---------- */
+#stack .phbay{position:relative;margin:0 0 20px}
+#stack .phdock{position:relative}
+#stack .phbay .ticket{margin:0}
+#stack .phbridge{position:relative;display:block;width:22px;height:14px;margin:0 auto;border:0;border-left:1px solid rgba(var(--sc),.8);border-right:1px solid rgba(var(--sc),.8);
+  background:linear-gradient(180deg,rgba(var(--sc),.55),rgba(var(--sc),.25));transform-origin:50% 0}
+#stack .phbridge.lit{background:linear-gradient(180deg,rgba(var(--sc),.85),rgba(var(--sc),.45))}
+#stack .phbay.row{display:flex;align-items:center}
+#stack .phbay.row .phdock{flex:none}
+#stack .phbrc{flex:none;width:28px;display:flex;align-items:center}
+#stack .phbridge.h{width:28px;height:20px;margin:0;border:0;border-top:1px solid rgba(var(--sc),.8);border-bottom:1px solid rgba(var(--sc),.8);
+  background:linear-gradient(90deg,rgba(var(--sc),.55),rgba(var(--sc),.25));transform-origin:0 50%}
+#stack .phcard{flex:1 1 auto;min-width:0}
+#stack .phbay.row .ticket .k{font-size:max(10px,var(--lfs))}   /* the row card's level keys never under the phone floor, even when a strip is squeezed */
+#stack .phbay.ev .anom{margin:0}
+#stack .phbay.phping::after{content:"";position:absolute;left:-6px;right:-6px;top:-6px;bottom:-6px;border-radius:12px;border:1px solid rgba(var(--sc),.9);box-shadow:0 0 18px rgba(var(--sc),.4);pointer-events:none;animation:phping 1.2s ease-out forwards}
+@keyframes phping{0%{opacity:0}18%{opacity:1}100%{opacity:0}}
+#stack .phfoot{height:calc(64px + env(safe-area-inset-bottom,0px));margin:0}
+
+/* ---------- selection (the desktop brush): the rest steps back ---------- */
+#stack.brush .tile:not(.lit),#stack.brush .ticket:not(.lit),#stack.brush .anom:not(.lit),#stack.brush .bridge:not(.lit),#stack.brush .ret,#stack.brush .phpick:not(.lit){opacity:.3}
+#stack.brush .cv.dimmable,#stack.brush .phzs{opacity:.35}
+#stack .cv.dimmable,#stack .phzs,#stack .phecho,#stack .gwin{transition:opacity .14s}
+
+/* ---------- the sheet: peek / half / full, a side panel in landscape and wide ---------- */
+#stack .phsheet{top:auto;max-height:none;padding:0;display:flex;flex-direction:column;font-size:12px;overflow:hidden;
+  transition:transform .34s cubic-bezier(.2,.9,.25,1),visibility 0s linear .34s,box-shadow .28s}
+#stack .phsheet.on{transition:transform .34s cubic-bezier(.2,.9,.25,1),visibility 0s,box-shadow .28s}
+#stack .phsheet.noanim,#stack .phsheet.drag{transition:none!important}
+#stack .phsheet .shd{position:relative;flex:none;padding:7px 16px 10px;touch-action:none;cursor:grab}
+#stack .phsheet .grab{margin:0 auto 8px}
+#stack .phsheet .sbody{position:relative;flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding:0 16px 18px;touch-action:pan-y;-webkit-user-select:text;user-select:text}
+#stack .phsheet .phh{display:flex;align-items:center;gap:10px;min-height:40px;padding-right:124px}
+#stack .phsheet .phh .tt{padding-top:1px}
+#stack .phsheet .phh.sec{padding-right:52px}
+#stack .phsheet .phh .mg{width:36px;height:36px;flex:none;font-size:15px}
+#stack .phsheet .phh .tt{display:flex;flex-direction:column;gap:5px;min-width:0}
+#stack .phsheet .phh .l1{display:flex;align-items:center;gap:10px;min-width:0}
+#stack .phsheet .phh .l2{display:flex;align-items:center;gap:8px;min-width:0}
+#stack .phsheet .phh .t{font:700 22px/1 var(--f-tk);letter-spacing:.01em;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#stack .phsheet .phh .n{font:600 10px/1.2 var(--f-ui);letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#stack .phsheet .phh .n{display:flex;align-items:center;gap:10px}
+#stack .phsheet .phh .n span{display:flex;align-items:center;gap:3px}
+#stack .phsheet .phh .n .u{color:var(--bull-hi)} #stack .phsheet .phh .n .d{color:var(--bear-hi)}
+#stack .phsheet .phh .n .tri{width:7px;height:7px;fill:currentColor}
+#stack .phsheet .phh .l2 .n{display:flex;align-items:baseline;gap:4px;min-width:0}
+#stack .phsheet .phh .l2 .nm{min-width:0;overflow:hidden;text-overflow:ellipsis}
+#stack .phsheet .phh .l2 u{flex:none}
+#stack .phsheet .phst .tri{width:7px;height:7px;fill:currentColor;margin-right:3px;vertical-align:0}
+#stack .phsheet .phst{flex:none;display:inline-flex;align-items:center;font:800 10px/1 var(--f-ui);letter-spacing:.1em;padding:4px 6px 3px;border-radius:4px;white-space:nowrap;background:rgba(var(--sc),.14);color:rgb(var(--hi));box-shadow:inset 0 0 0 1px rgba(var(--sc),.35)}
+#stack .phsheet .phst.hd{background:var(--raised);color:var(--ink-2);box-shadow:inset 0 0 0 1px var(--hair)}
+#stack .phsheet .phst.ev{background:rgba(255,176,32,.14);color:var(--amber);box-shadow:inset 0 0 0 1px rgba(255,176,32,.45)}
+#stack .phsheet .phsecb{display:block;max-width:100%;padding:0;border:0;background:none;text-align:left;cursor:pointer}
+#stack .phsheet .phsecb u{text-decoration:underline dotted;text-underline-offset:2px;color:var(--ink-2)}
+#stack .phsheet .phpc{font:700 15px/1 var(--f-num);font-variant-numeric:tabular-nums}
+#stack .phsheet .phpc.up{color:var(--bull-hi)} #stack .phsheet .phpc.dn{color:var(--bear-hi)}
+#stack .phsheet .phctl{position:absolute;right:6px;top:17px;display:flex}
+#stack .phsheet .phib{width:40px;height:40px;display:flex;align-items:center;justify-content:center;padding:0;border:0;border-radius:12px;background:none;color:var(--ink-2);cursor:pointer}
+#stack .phsheet .phib svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+#stack .phsheet .phib:disabled{opacity:.28;cursor:default}
+#stack .phsheet .phib.x{margin-left:4px;background:rgba(154,168,189,.1)}
+#stack .phsheet .row{font-size:11px}
+#stack .phsheet .row .k{font-size:9px}
+/* the quote line under the name, one row (owner request): the price and its move, then the jump chips and the ‹ ›
+   position at the right end. Too wide for the sheet: the move stacks under the price, then the chips tighten
+   (phFitQuote) */
+#stack .phsheet .phq{display:flex;align-items:center;gap:8px;height:30px;margin-top:10px;white-space:nowrap}
+#stack .phsheet .phq>*{flex:none}
+#stack .phsheet .phq .qv{display:flex;align-items:baseline;gap:8px;font-family:var(--f-num);font-variant-numeric:tabular-nums;line-height:1}
+#stack .phsheet .phq .lp{font-size:14px;font-weight:600;letter-spacing:-.01em;color:var(--ink)}
+#stack .phsheet .phq .qv>span+span{font-size:11.5px;font-weight:500}
+#stack .phsheet .phq.stk .qv{flex-direction:column;align-items:flex-start;gap:3px}
+#stack .phsheet .phjump{display:flex;align-items:center;gap:6px;margin-left:auto}
+#stack .phsheet .phjump button{position:relative;height:28px;padding:0 11px;border-radius:14px;border:1px solid var(--hair);background:var(--raised);font:700 10px/1 var(--f-ui);letter-spacing:.09em;text-transform:uppercase;color:var(--ink-2);cursor:pointer}
+#stack .phsheet .phjump button::after{content:"";position:absolute;left:-3px;right:-3px;top:-7px;bottom:-7px}
+#stack .phsheet .phq .pos{font:600 10px/1 var(--f-num);font-variant-numeric:tabular-nums;color:var(--ink-3)}
+#stack .phsheet .phq .pos i{font-style:normal;margin:0 1px;color:var(--ink-4)}
+#stack .phsheet .phq.tight .phjump{gap:4px}
+#stack .phsheet .phq.tight .phjump button{padding:0 8px}
+#stack .phsheet .phq.wrap{flex-wrap:wrap;height:auto;row-gap:10px}
+#stack .phsheet .phq.wrap .pos{margin-left:auto}
+/* the body: the day's line and the chart first, the stats under them (owner request) */
+#stack .phsheet .sbody .g2{margin-top:12px}
+/* a sheet under 430px: the stats stay two to a line (owner rule), each cell a half with its key above the value;
+   the value fits its half (11px, down to 10px: phFitStats) */
+#stack .phsheet .g2.ph2>.row{flex:0 0 50%;min-width:0;max-width:50%;flex-direction:column;justify-content:flex-start;align-items:flex-start;gap:2px;padding:5px 8px 1px}
+#stack .phsheet .g2.ph2>.row>span:last-child{display:block;max-width:100%;font-size:11px;line-height:1.2;white-space:nowrap;text-align:left}
+#stack .phsheet .g2.ph2>.row.note>span:last-child{font-size:10.5px;white-space:normal}
+#stack .phsheet .g2.ph2>.row.full{flex-basis:100%;max-width:100%}
+#stack .phsheet .phspark{display:block;margin-top:8px}   /* the body's first line: clear of the peek's edge (header + 8) */
+#stack .phsheet .phad{display:flex;gap:1px;height:6px;margin-top:12px;border-radius:2px;overflow:hidden}
+#stack .phsheet .phad i{flex:1 1 0}
+#stack .phsheet .phad .u{background:var(--bull);opacity:.8} #stack .phsheet .phad .d{background:var(--bear);opacity:.7}
+#stack .phlist{display:flex;flex-direction:column;margin-top:4px}
+#stack .phli{display:grid;grid-template-columns:96px minmax(0,1fr) 62px 108px;align-items:center;column-gap:10px;width:100%;height:46px;padding:0 4px;border:0;border-bottom:1px solid rgba(154,168,189,.1);background:none;text-align:left;cursor:pointer}
+#stack .phli .tk{font:700 16px/1 var(--f-tk);letter-spacing:.01em;color:var(--ink);white-space:nowrap}
+#stack .phli .nm{font:500 11px/1.1 var(--f-ui);color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#stack .phli .pc{font:600 12px/1 var(--f-num);font-variant-numeric:tabular-nums;text-align:right;color:var(--ink-2)}
+#stack .phli .pc.up{color:var(--bull-hi)} #stack .phli .pc.dn{color:var(--bear-hi)} #stack .phli .pc.ev{color:var(--crash)}
+#stack .phli .st{display:flex;align-items:center;justify-content:flex-end;gap:3px;min-width:74px;font:700 10px/1 var(--f-ui);letter-spacing:.05em;white-space:nowrap;color:var(--ink-3)}
+#stack .phli .st .tri{width:7px;height:7px;fill:currentColor}
+#stack .phli .st.up{color:var(--bull-hi)} #stack .phli .st.dn{color:var(--bear-hi)} #stack .phli .st.ev{color:var(--amber)}
+#stack .phli.lit{background:rgba(232,241,255,.05)}
+#stack .phnone{padding:24px 4px;font:600 11px/1.3 var(--f-ui);letter-spacing:.06em;color:var(--ink-3);text-align:center}
+#stack .phsearch{position:relative;height:40px;margin-right:50px}
+#stack .phsearch svg{position:absolute;left:12px;top:11px;width:18px;height:18px;fill:none;stroke:var(--ink-3);stroke-width:1.7;stroke-linecap:round;pointer-events:none}
+#stack .phsearch input{width:100%;height:40px;box-sizing:border-box;border-radius:11px;border:1px solid var(--hair);background:var(--bg-2);color:var(--ink);font:500 16px/1 var(--f-ui);padding:0 12px 0 38px;outline:none;-webkit-appearance:none;appearance:none;-webkit-user-select:text;user-select:text}
+#stack .phsearch input::placeholder{color:var(--ink-3)}
+#stack .phsearch input:focus{border-color:rgba(169,184,255,.5)}
+#stack .phsheet .shd .phsearch + .phctl{top:13px}
+#stack .phfilt{display:flex;gap:6px;margin-top:10px;overflow-x:auto;scrollbar-width:none}
+#stack .phfilt::-webkit-scrollbar{display:none}
+#stack .phf{flex:none;display:flex;align-items:center;gap:4px;height:38px;padding:0 11px;border-radius:19px;border:1px solid var(--hair);background:none;font:700 10px/1 var(--f-ui);letter-spacing:.08em;color:var(--ink-2);cursor:pointer;white-space:nowrap}
+#stack .phf b{font:600 11px/1 var(--f-num);color:var(--ink-3)}
+#stack .phf.on{background:var(--raised);color:var(--ink);border-color:rgba(232,241,255,.28)}
+#stack .phf.on b{color:var(--ink-2)}
+#stack .phf:disabled{opacity:.35;cursor:default}
+#stack .phf.side .tri{width:7px;height:7px;fill:currentColor}
+#stack .phf.side.up{color:var(--bull-hi)} #stack .phf.side.dn{color:var(--bear-hi)}
+#stack .phf.side i{font-style:normal;font-size:13px;margin-left:2px;color:var(--ink-3)}
+#stack .phscrim{position:fixed;left:0;top:0;right:0;bottom:0;z-index:55;background:rgba(2,4,8,0);pointer-events:none;transition:background .28s}
+#stack .phscrim.on.half{background:rgba(2,4,8,.12)}
+#stack .phscrim.on.full{background:rgba(2,4,8,.5);pointer-events:auto}
+#stack .phloupe{position:fixed;left:0;top:0;z-index:70;display:flex;align-items:center;gap:8px;height:30px;padding:0 11px;border-radius:15px;white-space:nowrap;pointer-events:none;
+  background:rgba(10,15,23,.95);border:1px solid rgba(154,168,189,.25);box-shadow:0 8px 20px rgba(0,0,0,.5);opacity:0;transform:translateY(4px);transition:opacity .12s,transform .12s}
+#stack .phloupe.on{opacity:1;transform:none}
+#stack .phloupe b{font:700 15px/1 var(--f-tk);color:var(--ink)}
+#stack .phloupe .pc{font:600 11px/1 var(--f-num)}
+#stack .phloupe .pc.up,#stack .phloupe .st.up{color:var(--bull-hi)} #stack .phloupe .pc.dn,#stack .phloupe .st.dn{color:var(--bear-hi)}
+#stack .phloupe .st{font:700 10px/1 var(--f-ui);letter-spacing:.06em;color:var(--ink-3)}
+#stack .phloupe .st.ev{color:var(--amber)}
+/* landscape phones and wide frames: a right-hand panel, full height, no detents */
+#stack.phside .phsheet{left:auto;right:0;top:44px;bottom:0;width:min(400px,100vw);max-width:none;height:auto!important;margin:0;border-radius:14px 0 0 0;border-bottom:1px solid #243044;transform:translateX(105%)}
+#stack.phside .phsheet.dockl{left:0;right:auto;border-radius:0 14px 0 0;transform:translateX(-105%)}   /* docked away from a target on the right */
+#stack.phside .phsheet.on{transform:none}
+#stack.phside .phsheet .grab{visibility:hidden;height:0;margin:0}
+#stack.phside .phsheet .shd{cursor:default;padding-top:12px}
+#stack.phside .phsheet .phctl{top:12px}
+#stack.phside .phscrim{display:none}
+@media (max-height:500px){
+  #stack .phnav{height:40px}
+  #stack.phside .phsheet{top:40px}
+  #stack .phn{gap:3px}
+}
+/* ================= phone motion (SPEC §7): the build show's pre states, the ambient layer =================
+   Injected by tools/patch_terminal.py after tools/terminal_phone.css (still inside the main <style>, ahead of the light
+   layer). A section that has not played its intro carries class phpre on the intro's own element; everything here is
+   scoped to it or to #stack, so a rebuild with nothing left to play renders final and the desktop never sees it. */
+
+/* the pre states land at once; CSS loops pause in sections that are off screen */
+#stack .phnoanim,#stack .phnoanim *{transition:none!important}
+#stack .phoff,#stack .phoff *,#stack .phoff::before,#stack .phoff::after,#stack .phoff *::before,#stack .phoff *::after{animation-play-state:paused!important}
+/* desktop and phone now share compositor-only rings, specular translateX, and rotating conic sheen */
+#stack .reactor svg g.r1,#stack .reactor svg g.r2{animation:none}
+#stack .reactor svg.phr1{animation:spin 24s linear infinite}
+#stack .reactor svg.phr2{animation:spin 36s linear infinite reverse}
+/* no entrance, glow ring or flare may ever widen the page (a phone would shrink the whole page to fit it) */
+#stack .phpage{overflow-x:clip}
+
+/* spine nodes and their count badges wait for their station */
+#stack .phwait,#stack.brush .phwait{opacity:0}
+
+/* ---------- MARKET: the setup chips pop, the sectors light in order ---------- */
+#stack .phpre .phreact,#stack .phpre .phrailhd .phcnt{transition:opacity .3s var(--ease),transform .5s cubic-bezier(.2,1.5,.35,1)}
+#stack .phpre .phreact:not(.in){opacity:0;transform:scale(.4)}
+#stack .phpre .phrailhd .phcnt:not(.cntpop){opacity:0}
+#stack .phpre .phpick{transition:opacity .3s var(--ease),transform .45s cubic-bezier(.2,1.4,.4,1),box-shadow .14s}
+#stack .phpre .phpick:not(.in){opacity:0;transform:translateY(8px) scale(.94)}
+#stack .phpre .schips .chip{transition:opacity .32s var(--ease),transform .32s var(--ease),border-color .14s,box-shadow .14s}
+#stack .phpre .schips .chip:not(.in){opacity:0;transform:translateY(5px)}
+
+/* ---------- FLOW: the canvases are clipped from script; NOW, nodes, captions, labels and windows wait ---------- */
+#stack .phflow.phpre .nowline,#stack .phflow.phpre .nowglow,#stack .phflow.phpre .gwin,#stack .phflow.phpre .phwin,#stack .phflow.phpre .phcrash{transition:opacity .45s var(--ease)}
+#stack .phflow.phpre .phaxis .lb,#stack .phflow.phpre .phaxis svg,#stack .phflow.phpre .phhours span,#stack .phflow.phpre .phhours i{transition:opacity .3s var(--ease)}
+#stack .phflow.phpre .nowline:not(.in),#stack .phflow.phpre .nowglow:not(.in),#stack .phflow.phpre .node:not(.in),
+#stack .phflow.phpre .phcap:not(.cntpop),#stack .phflow.phpre .gwin:not(.in),#stack .phflow.phpre .phwin:not(.in),
+#stack .phflow.phpre .phcrash:not(.in),#stack .phflow.phpre .phaxis .lb:not(.in),#stack .phflow.phpre .phaxis svg:not(.in),
+#stack .phflow.phpre .phhours span:not(.in),#stack .phflow.phpre .phhours i:not(.in){opacity:0}
+#stack .phflow.phpre .phwalls{animation:none}
+/* the walls breathe (the desktop's wallsh) once the flow has played, and step back with the rest under a brush */
+#stack:not(.brush) .phflow:not(.phpre) .phwalls{animation:wallsh 5.3s ease-in-out infinite}
+/* the replay head (09:15 → NOW) */
+#stack .phscan{position:absolute;width:2px;margin-left:-1px;pointer-events:none;opacity:0;z-index:3;will-change:transform,opacity;
+  background:linear-gradient(180deg,transparent,rgba(232,241,255,.55) 12%,rgba(232,241,255,.75) 50%,rgba(232,241,255,.55) 88%,transparent);
+  box-shadow:0 0 10px rgba(169,184,255,.55),0 0 2px rgba(255,255,255,.6)}
+#stack .phscan::before{content:"";position:absolute;top:0;bottom:0;right:1px;width:44px;background:linear-gradient(90deg,transparent,rgba(169,184,255,.08));
+  -webkit-mask:linear-gradient(180deg,transparent,#000 12%,#000 88%,transparent);mask:linear-gradient(180deg,transparent,#000 12%,#000 88%,transparent)}
+
+/* ---------- BRANCH: the lens band's own particle layer; tiers build tile by tile ---------- */
+#stack .phlens canvas.phlensfx{pointer-events:none}
+#stack.brush .phlens canvas.phlensfx{opacity:.9}
+#stack .phtier.phpre .phthd,#stack .phtier.phpre .phecho{transition:opacity .35s var(--ease)}
+#stack .phtier.phpre:not(.go) .phthd,#stack .phtier.phpre:not(.go) .phecho{opacity:0}
+#stack .phpre .tile:not(.in){opacity:0;transform:translateY(8px)}
+#stack .phpre .tile:not(.in) .br{transform:scale(1.3);opacity:0}
+
+/* ---------- SETUP BAYS: reticle lock-on, bridge, the desktop card entrance (from the bridge above) ---------- */
+#stack .phbay.phpre .tile:not(.in){transform:translateY(-6px)}
+/* the reticle locks on: its four corners close in on the tile (a full-width box scaled up would leave the screen) */
+#stack .phbay.phpre .ret{transition:opacity .2s var(--ease)}
+#stack .phbay.phpre .ret i{transition:transform .34s cubic-bezier(.2,1.45,.35,1)}
+#stack .phbay.phpre .ret:not(.in){opacity:0}
+#stack .phbay.phpre .ret:not(.in) i:nth-child(1){transform:translate(-14px,-12px)}
+#stack .phbay.phpre .ret:not(.in) i:nth-child(2){transform:translate(14px,-12px)}
+#stack .phbay.phpre .ret:not(.in) i:nth-child(3){transform:translate(-14px,12px)}
+#stack .phbay.phpre .ret:not(.in) i:nth-child(4){transform:translate(14px,12px)}
+#stack .phbay.phpre .phbridge{transition:transform .24s var(--ease),opacity .2s}
+#stack .phbay.phpre .phbridge:not(.in){opacity:0;transform:scaleY(0)}
+#stack .phbay.phpre .phbridge.h:not(.in){transform:scaleX(0)}
+#stack .phbay.phpre .ticket:not(.in),#stack .phbay.phpre .anom:not(.in){opacity:0;transform:translateY(-14px) scale(.97) perspective(900px) rotateX(7deg);filter:blur(8px)}
+#stack .phbay.row.phpre .ticket:not(.in),#stack .phbay.row.phpre .anom:not(.in){transform:translateX(-24px) scale(.97) perspective(900px) rotateY(-6deg)}
+#stack .phbay.phpre .ticket .cc{clip-path:inset(0 100% 0 0)}
+#stack .phbay.phpre .ticket.in .cc{clip-path:inset(0 0 0 0);transition:clip-path .4s linear .12s}
+#stack .phbay.phpre .ticket .ob{transform:scaleX(0)}
+#stack .phbay.phpre .ticket.in .ob{transform:none;transition:transform .25s var(--ease) .5s}
+#stack .phbay.phpre .ticket .chip2,#stack .phbay.phpre .ticket .lvl,#stack .phbay.phpre .ticket .pos,#stack .phbay.phpre .ticket .lp{opacity:0;transform:translateX(10px)}
+#stack .phbay.phpre .ticket.in .chip2,#stack .phbay.phpre .ticket.in .lvl,#stack .phbay.phpre .ticket.in .pos,#stack .phbay.phpre .ticket.in .lp{opacity:1;transform:none;transition:opacity .3s .55s,transform .35s var(--ease) .55s}
+#stack .phbay.phpre .ticket .rrbar i{transform:scaleX(0);transform-origin:0 50%}
+#stack .phbay.phpre .ticket.in .rrbar i{transform:none;transition:transform .45s var(--ease) .35s}
+/* the lock-on flash over a pick's tile, and a packet running a bridge */
+#stack .phlock{position:absolute;left:0;top:0;right:0;bottom:0;border-radius:inherit;pointer-events:none;z-index:5;background:rgba(255,255,255,.16)}
+#stack .phpk{position:absolute;left:50%;top:0;width:12px;height:12px;margin:-6px 0 0 -6px;border-radius:50%;pointer-events:none;z-index:2;
+  background:radial-gradient(circle,#fff 0 22%,rgba(var(--sc),.9) 45%,rgba(var(--sc),0) 70%)}
+#stack .phbridge.h .phpk{left:0;top:50%}
+
+/* ---------- ambient: the spine comet and the sweep band ---------- */
+#stack .phcomet{position:absolute;left:-13px;top:0;width:0;height:0;z-index:2;pointer-events:none;opacity:0;will-change:transform,opacity}
+#stack .phcomet i{position:absolute;left:-1.5px;top:-86px;width:3px;height:86px;border-radius:2px;background:linear-gradient(180deg,rgba(232,241,255,0),rgba(232,241,255,.85));filter:drop-shadow(0 0 3px rgba(169,184,255,.9))}
+#stack .phcomet b{position:absolute;left:-3.5px;top:-3.5px;width:7px;height:7px;border-radius:50%;background:#fff;box-shadow:0 0 10px 3px rgba(169,184,255,.75)}
+#stack.brush .phcomet i,#stack.brush .phcomet b{opacity:.4}
+#stack .phsweep{position:fixed;left:0;right:0;top:0;height:150px;margin-top:-75px;pointer-events:none;z-index:30;opacity:0;will-change:transform,opacity;
+  background:linear-gradient(180deg,rgba(255,255,255,0),rgba(255,255,255,.05) 50%,rgba(255,255,255,0))}
+
+/* ---------- ↻ replay (FLOW header) ---------- */
+#stack .phhd .phreplay{order:2;position:relative;flex:none;display:flex;align-items:center;justify-content:center;width:28px;height:28px;margin:0 0 0 4px;padding:0;border-radius:50%;
+  border:1px solid var(--hair);background:var(--raised);color:var(--ink-3);cursor:pointer;transition:color .15s,border-color .15s}
+#stack .phhd .phreplay::after{content:"";position:absolute;left:50%;top:50%;width:44px;height:44px;transform:translate(-50%,-50%)}
+#stack .phhd .phreplay svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+#stack .phhd .phreplay:active{color:var(--ink);border-color:rgba(169,184,255,.5)}
+/* Locked preview CSS removed to ensure crystal-clear text */
+/* ---- desktop stock search (tools/terminal_find.js): a field above the stage's top-left corner (in the row
+   computeScale keeps clear), the matches in a list under it, drawn like the popup. Light colours: terminal_light.html ---- */
+#obFind{position:fixed;left:0;top:0;z-index:45;width:440px;font-family:var(--f-ui);opacity:0;transform:translateY(-3px);
+  transition:opacity .5s var(--ease) .15s,transform .5s var(--ease) .15s}
+#obFind.in{opacity:1;transform:none}
+body.stacked #obFind{display:none}
+#obFind .obf-f{position:relative;display:flex;align-items:center;width:300px;height:30px;border-radius:9px;border:1px solid var(--hair);
+  background:var(--panel);transition:width .28s var(--ease),border-color .15s,box-shadow .15s}
+#obFind .obf-f:hover{border-color:#243044}
+#obFind.open .obf-f,#obFind .obf-f:focus-within{width:440px;border-color:rgba(169,184,255,.45);box-shadow:0 0 0 3px rgba(124,140,255,.1)}
+#obFind .obf-f svg{position:absolute;left:10px;top:50%;width:16px;height:16px;margin-top:-8px;fill:none;stroke:var(--ink-3);stroke-width:1.7;stroke-linecap:round;pointer-events:none}
+#obFind input{flex:1;min-width:0;height:100%;margin:0;padding:0 8px 0 33px;border:0;outline:0;background:none;color:var(--ink);
+  font:500 13px/1 var(--f-ui);letter-spacing:.01em;-webkit-appearance:none;appearance:none}
+#obFind input::placeholder{color:var(--ink-2);opacity:.8}
+#obFind input::-webkit-search-cancel-button,#obFind input::-webkit-search-decoration{-webkit-appearance:none;appearance:none;display:none}
+#obFind kbd{flex:none;margin-right:6px;padding:3px 6px 2px;border-radius:5px;border:1px solid var(--hair);background:none;color:var(--ink-3);
+  font:600 10px/1 var(--f-ui);letter-spacing:.04em;white-space:nowrap;transition:opacity .15s}
+#obFind.open kbd,#obFind .obf-f:focus-within kbd{opacity:0}
+#obFind .obf-l{position:absolute;left:0;top:36px;width:440px;overflow-y:auto;overscroll-behavior:contain;padding:4px;border-radius:10px;
+  border:1px solid #243044;background:rgba(7,10,15,.975);box-shadow:0 18px 40px rgba(0,0,0,.62),0 0 0 1px rgba(0,0,0,.4),inset 0 1px 0 rgba(255,255,255,.05);
+  scrollbar-width:thin;scrollbar-color:rgba(154,168,189,.22) transparent;animation:obfIn .16s var(--ease)}
+#obFind .obf-l[hidden]{display:none}
+@keyframes obfIn{from{opacity:0;transform:translateY(-4px)}}
+#obFind .obf-r{display:grid;grid-template-columns:84px minmax(0,1fr) 62px 96px;align-items:center;column-gap:10px;height:34px;padding:0 10px;
+  border-radius:7px;cursor:pointer}
+#obFind .obf-r .tk{font:700 15px/1 var(--f-tk);letter-spacing:.01em;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#obFind .obf-r .nm{font:500 11.5px/1.2 var(--f-ui);color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#obFind .obf-r .nm em{font-style:normal;font-weight:600;letter-spacing:.03em}
+#obFind .obf-r .pc{font:600 12px/1 var(--f-num);font-variant-numeric:tabular-nums;text-align:right;color:var(--ink-2)}
+#obFind .obf-r .pc.up{color:var(--bull-hi)} #obFind .obf-r .pc.dn{color:var(--bear-hi)} #obFind .obf-r .pc.ev{color:var(--crash)}
+#obFind .obf-r .st{display:flex;align-items:center;justify-content:flex-end;gap:3px;font:700 10px/1 var(--f-ui);letter-spacing:.05em;white-space:nowrap;color:var(--ink-3)}
+#obFind .obf-r .st .tri{width:7px;height:7px;fill:currentColor}
+#obFind .obf-r .st.up{color:var(--bull-hi)} #obFind .obf-r .st.dn{color:var(--bear-hi)} #obFind .obf-r .st.ev{color:var(--amber)}
+#obFind .obf-r.on{background:rgba(232,241,255,.06)}
+#obFind .obf-r.on.up{box-shadow:inset 2px 0 0 var(--bull)} #obFind .obf-r.on.dn{box-shadow:inset 2px 0 0 var(--bear)} #obFind .obf-r.on.ev{box-shadow:inset 2px 0 0 var(--amber)}
+#obFind .obf-none{padding:18px 10px;font:600 11px/1.3 var(--f-ui);letter-spacing:.06em;color:var(--ink-3);text-align:center}
+
+#obTopControls {
+  position: fixed; z-index: 41; display: flex; align-items: center; gap: 10px;
+  height: 28px; font: 600 11px/1 "Inter Tight",-apple-system,sans-serif; color: #C9D4E5;
+  user-select: none;
+}
+body.stacked #obTopControls { display: none; }
+#obTopControls .obc-group {
+  display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 9px;
+  border-radius: 7px; background: rgba(12,18,28,.86); border: 1px solid #1E2A3C;
+  box-shadow: 0 4px 14px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.04);
+}
+#obTopControls .obc-lbl {
+  font: 700 9.5px/1 "JetBrains Mono",monospace; letter-spacing: .08em; color: #6E809B;
+}
+#obTopControls select {
+  background: transparent; border: 0; color: #EEF3FA; font: 600 11px/1 "Inter Tight",sans-serif;
+  outline: none; cursor: pointer; padding-right: 4px;
+}
+#obTopControls select option { background: #0B1018; color: #EEF3FA; }
+#obTopControls .obc-pills {
+  display: inline-flex; align-items: center; gap: 3px; height: 28px; padding: 2px;
+  border-radius: 7px; background: rgba(12,18,28,.86); border: 1px solid #1E2A3C;
+}
+#obTopControls .obc-pill {
+  display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 9px;
+  border-radius: 5px; border: 0; background: transparent; color: #9AA8BD;
+  font: 600 11px/1 "Inter Tight",sans-serif; cursor: pointer; transition: all .18s ease;
+}
+#obTopControls .obc-pill:hover { color: #EEF3FA; background: rgba(255,255,255,.05); }
+#obTopControls .obc-pill.on[data-side="ALL"] {
+  background: rgba(232,241,255,.12); color: #FFFFFF; box-shadow: inset 0 0 0 1px rgba(232,241,255,.28);
+}
+#obTopControls .obc-pill.on[data-side="BULL"] {
+  background: rgba(25,229,140,.16); color: #7CFFC4; box-shadow: inset 0 0 0 1px rgba(25,229,140,.45), 0 0 10px rgba(25,229,140,.2);
+}
+#obTopControls .obc-pill.on[data-side="BEAR"] {
+  background: rgba(255,59,92,.16); color: #FF9AA8; box-shadow: inset 0 0 0 1px rgba(255,59,92,.45), 0 0 10px rgba(255,59,92,.2);
+}
+#obTopControls .obc-cnt {
+  font: 700 9.5px/1 "JetBrains Mono",monospace; padding: 2px 4px; border-radius: 4px;
+  background: rgba(255,255,255,.07); color: inherit;
+}
+#stage {
+  transition: transform .42s cubic-bezier(.22,1,.36,1), opacity .28s ease;
+}
+

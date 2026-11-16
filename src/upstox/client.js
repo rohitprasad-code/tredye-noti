@@ -5,6 +5,7 @@ const path = require('node:path');
 const zlib = require('node:zlib');
 const WebSocket = require('ws');
 const protobuf = require('protobufjs');
+const { normalizeBearerToken, decodeJwtClaims, isJwtExpired } = require('./jwt');
 
 const UPSTOX_API_BASE = 'https://api.upstox.com';
 const INSTRUMENTS_NSE_URL = 'https://assets.upstox.com/market-quote/instruments/exchange/NSE.json.gz';
@@ -12,47 +13,6 @@ const PROTO_PATH = path.join(__dirname, 'MarketDataFeedV3.proto');
 const IST_OFFSET_MS = 5.5 * 3600 * 1000;
 const ANALYTICS_MIN_SPAN_MS = 30 * 86400 * 1000;
 const TOKEN_VERIFY_KEY = 'NSE_EQ|INE002A01018';
-
-/**
- * Strips an optional leading "Bearer " prefix and surrounding whitespace from an API token.
- */
-function normalizeBearerToken(raw) {
-  return String(raw || '')
-    .trim()
-    .replace(/^Bearer\s+/i, '')
-    .trim();
-}
-
-/**
- * Decodes unverified JWT payload claims (exp, iat, sub) for local lifetime detection.
- */
-function decodeJwtClaims(token) {
-  const clean = normalizeBearerToken(token);
-  const parts = clean.split('.');
-  if (parts.length !== 3 || !parts[1]) return null;
-  try {
-    const normalizedB64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
-    const padLen = (4 - (normalizedB64.length % 4)) % 4;
-    const jsonStr = Buffer.from(normalizedB64 + '='.repeat(padLen), 'base64').toString('utf8');
-    const payload = JSON.parse(jsonStr);
-    if (!payload || typeof payload !== 'object') return null;
-    const expNum = Number(payload.exp);
-    const iatNum = Number(payload.iat);
-    return {
-      expMs: Number.isFinite(expNum) && expNum > 0 ? expNum * 1000 : null,
-      iatMs: Number.isFinite(iatNum) && iatNum > 0 ? iatNum * 1000 : null,
-      sub: payload.sub ? String(payload.sub) : '',
-      payload,
-    };
-  } catch {
-    return null;
-  }
-}
-
-function isJwtExpired(token) {
-  const claims = decodeJwtClaims(token);
-  return Boolean(claims?.expMs && Date.now() >= claims.expMs);
-}
 
 function istDateStr(tsOrIso) {
   const num = typeof tsOrIso === 'string' && !/^\d+$/.test(tsOrIso.trim())

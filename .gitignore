@@ -1,10 +1,15 @@
 node_modules/
+.next/
+out/
+next-env.d.ts
 .env
+.env*.local
 .session-cookie
 data/*.db
 data/*.db-wal
 data/*.db-shm
 data/upstox-token.json
+*.log
 .recon/
 .DS_Store
 

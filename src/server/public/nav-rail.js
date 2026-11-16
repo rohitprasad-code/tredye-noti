@@ -1,32 +1,57 @@
 (function () {
-  function readThemeCookie() {
-    const match = document.cookie.match(/(?:^|;\s*)ob_theme=(light|dark|system)(?:;|$)/);
-    if (!match) return 'dark';
-    if (match[1] === 'system') {
-      return window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches
-        ? 'light'
-        : 'dark';
-    }
-    return match[1];
+  var mqLight = window.matchMedia ? window.matchMedia('(prefers-color-scheme: light)') : null;
+  var mqDark = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+
+  function systemTheme() {
+    if (mqLight && mqLight.matches) return 'light';
+    if (mqDark && mqDark.matches) return 'dark';
+    return 'dark';
   }
 
-  function applyTheme(theme) {
-    const t = theme === 'light' ? 'light' : 'dark';
+  function readExplicitCookie() {
+    var match = document.cookie.match(/(?:^|;\s*)ob_theme=(light|dark)(?:;|$)/);
+    return match ? match[1] : null;
+  }
+
+  function applyTheme(theme, explicitCookie) {
+    var t = theme === 'light' ? 'light' : 'dark';
     document.documentElement.setAttribute('data-theme', t);
-    document.documentElement.style.colorScheme = t;
+    if (document.documentElement.style) document.documentElement.style.colorScheme = t;
+    var meta = document.querySelector && document.querySelector('meta[name="color-scheme"]');
+    if (meta) meta.content = explicitCookie || 'light dark';
     document.querySelectorAll('#obSideRail .rt-btn').forEach(function (btn) {
-      btn.classList.toggle('on', btn.getAttribute('data-theme-set') === t);
+      var active = btn.getAttribute('data-theme-set') === t;
+      btn.classList.toggle('on', active);
+      btn.setAttribute('aria-pressed', active ? 'true' : 'false');
     });
   }
 
-  function writeThemeCookie(theme) {
-    const t = theme === 'light' ? 'light' : 'dark';
-    document.cookie = 'ob_theme=' + t + '; path=/; max-age=31536000; SameSite=Lax';
-    applyTheme(t);
+  function updateThemePreference(theme) {
+    var next = theme === 'light' ? 'light' : 'dark';
+    var current = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+    if (next === current) return;
+    var sys = systemTheme();
+    if (next !== sys) {
+      document.cookie = 'ob_theme=' + next + '; path=/; max-age=31536000; SameSite=Lax';
+      applyTheme(next, next);
+    } else {
+      document.cookie = 'ob_theme=; path=/; max-age=0; SameSite=Lax';
+      applyTheme(next, null);
+    }
   }
 
-  // Apply theme as early as possible to avoid flash
-  applyTheme(readThemeCookie());
+  // First default follows the browser preference; cookie only exists when explicitly modified
+  var initialOverride = readExplicitCookie();
+  applyTheme(initialOverride || systemTheme(), initialOverride);
+
+  var onSystemChange = function () {
+    if (!readExplicitCookie()) applyTheme(systemTheme(), null);
+  };
+  [mqDark, mqLight].forEach(function (mq) {
+    if (!mq) return;
+    if (mq.addEventListener) mq.addEventListener('change', onSystemChange);
+    else if (mq.addListener) mq.addListener(onSystemChange);
+  });
 
   function mountNavRail() {
     if (!document.body || !document.body.classList.contains('has-ob-rail')) return;
@@ -106,7 +131,7 @@
     aside.querySelectorAll('.rt-btn').forEach(function (btn) {
       btn.addEventListener('click', function () {
         const next = btn.getAttribute('data-theme-set') || 'dark';
-        writeThemeCookie(next);
+        updateThemePreference(next);
       });
     });
   }

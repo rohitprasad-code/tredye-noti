@@ -3,7 +3,7 @@
    of /app/orderblock across / (Alert Desk) and /app/journal (My Journey). */
 
 :root {
-  color-scheme: dark;
+  color-scheme: light dark;
   --bg: #04060A;
   --bg-2: #070A10;
   --panel: #0A0F17;
@@ -61,6 +61,9 @@
   --border-subtle: #1A2433;
 }
 
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
 :root[data-theme="light"] {
   color-scheme: light;
   --bg: #F4F6F9;
@@ -376,6 +379,7 @@ body.rail-expanded .ob-side-rail .rail-theme-pill {
   background: rgba(248, 250, 252, 0.98);
   border-right-color: #DCE2EB;
 }
+:root[data-theme="light"] .ob-side-rail .rail-logo { color: #0B1220; }
 :root[data-theme="light"] .ob-side-rail .logo-bars .b2 { background: #0B1220; }
 :root[data-theme="light"] .ob-side-rail .rail-collapse,
 :root[data-theme="light"] .ob-side-rail .rail-item {
@@ -391,14 +395,35 @@ body.rail-expanded .ob-side-rail .rail-theme-pill {
   border-color: #94A3B8;
 }
 :root[data-theme="light"] .ob-side-rail .rail-item.active {
-  color: #0E9F63;
-  background: rgba(14, 159, 99, 0.1);
-  border-color: rgba(14, 159, 99, 0.35);
+  color: #087A4A;
+  background: rgba(14, 159, 99, 0.12);
+  border-color: rgba(14, 159, 99, 0.4);
   box-shadow: none;
 }
-:root[data-theme="light"] .ob-side-rail .rt-btn.on {
+:root[data-theme="light"] .ob-side-rail .rail-theme-pill {
+  background: #EEF2F7;
+  border-color: #CBD5E1;
+}
+:root[data-theme="light"] .ob-side-rail .rt-btn {
+  color: #475569;
+}
+:root[data-theme="light"] .ob-side-rail .rt-btn:hover {
+  color: #0B1220;
+  background: rgba(15, 23, 42, 0.06);
+}
+:root[data-theme="light"] .ob-side-rail .rt-btn.on,
+:root[data-theme="light"] .ob-side-rail .rt-btn[data-theme-set="light"].on {
   background: #0B1220;
   color: #FFFFFF;
+}
+:root[data-theme="light"] .ob-side-rail .rail-live-dot {
+  box-shadow: 0 0 6px rgba(14, 159, 99, 0.35);
+}
+:root[data-theme="light"] body:not(.rail-expanded) .ob-side-rail .rail-item[data-tip]:hover::after {
+  background: #FFFFFF;
+  color: #0B1220;
+  border-color: #CBD5E1;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.14);
 }
 
 @media (max-width: 720px) {
