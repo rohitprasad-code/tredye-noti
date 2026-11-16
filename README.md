@@ -6,6 +6,21 @@ A local Node.js service and real-time **Order Block Terminal** (`http://localhos
 
 ---
 
+## Preview
+
+![Order Block Terminal Walkthrough](docs/demo.gif)
+
+<details>
+<summary>Static screenshots (Dark Mode Inspector &amp; Light Mode)</summary>
+
+| Dark Mode (Hover Inspector &amp; OB Zone) | Light Mode |
+| :---: | :---: |
+| ![Order Block Terminal Dark Mode](docs/preview-dark.jpg) | ![Order Block Terminal Light Mode](docs/preview-light.jpg) |
+
+</details>
+
+---
+
 ## Features
 
 - **Try Immediately Offline (`npm run demo`):** Built-in NSE sample dataset (`data/sample-fixture.js`) so anyone can explore the terminal without Upstox or Tredye credentials.
