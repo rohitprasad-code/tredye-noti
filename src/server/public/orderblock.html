@@ -10,6 +10,7 @@
 <link rel="stylesheet" href="/static/ob/orderblock.css">
 <link rel="stylesheet" href="/static/ob/orderblock-light.css" id="obf-light">
 <script defer src="/vendor/gsap.min.js"></script>
+<script defer src="/market-hours.js"></script>
 <script defer src="/static/ob/orderblock.js"></script>
 </head>
 <body>
@@ -78,11 +79,15 @@
         <option value="FLOW_SCORE">Strongest Flow</option>
       </select>
     </div>
+    <div class="ob-market-pill is-closed" id="obMarketStatus" role="status" aria-live="off" title="NSE session status (IST)">
+      <span class="ob-mkt-state" id="obMarketState">Closed</span>
+      <span class="ob-mkt-sep" aria-hidden="true">·</span>
+      <span class="ob-mkt-count" id="obMarketCount">opens —</span>
+    </div>
     <div class="ob-live-status">
       <span class="ob-live-dot">●</span>
       <span class="ob-live-txt" id="obLiveClock">LIVE</span>
     </div>
-    <button type="button" id="obMotionBtn" class="ob-motion-btn" title="Pause or play ambient animations" aria-label="Pause ambient animations">Pause FX</button>
     <button type="button" id="obSyncBtn" class="ob-sync-btn" title="Refresh Live Data">↻</button>
   </div>
 </header>

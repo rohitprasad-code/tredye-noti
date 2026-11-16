@@ -12,6 +12,7 @@ export default function OrderBlockTerminal() {
       <link rel="stylesheet" href="/static/ob/orderblock.css" />
       <link rel="stylesheet" href="/static/ob/orderblock-light.css" id="obf-light" />
       <Script src="/vendor/gsap.min.js" strategy="afterInteractive" />
+      <Script src="/market-hours.js" strategy="afterInteractive" />
       <Script src="/static/ob/orderblock.js" strategy="afterInteractive" />
 
       <NavRail active="orderblock" />

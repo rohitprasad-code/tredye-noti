@@ -312,6 +312,76 @@
   initValidation();
   refreshState();
 
+  const initMarketStatus = () => {
+    const pill = document.getElementById('settingsMarketPill');
+    if (!pill) return;
+    const render = () => {
+      if (!window.NSEMarketHours?.getMarketStatus) return;
+      const ms = window.NSEMarketHours.getMarketStatus(new Date());
+      pill.className = 'market-status-pill ' + (ms.open ? 'is-open' : 'is-closed');
+      pill.textContent = `NSE ${ms.shortText}`;
+      pill.title = ms.detailText;
+      pill.setAttribute('aria-label', ms.detailText);
+    };
+    render();
+    if (typeof setInterval === 'function') setInterval(render, 1000);
+  };
+  initMarketStatus();
+
+  const initFxControls = () => {
+    const toggleBtn = document.getElementById('fxToggleBtn');
+    const toggleLabel = document.getElementById('fxToggleLabel');
+    const badge = document.getElementById('fxStatusBadge');
+    const msgEl = document.getElementById('fxStatusMsg');
+    if (!toggleBtn) return;
+
+    const readPaused = () => {
+      try {
+        return localStorage.getItem('ob_fx_paused') === '1';
+      } catch {
+        return false;
+      }
+    };
+
+    const syncFxUi = (paused, announce = false) => {
+      const playing = !paused;
+      toggleBtn.setAttribute('aria-checked', String(playing));
+      toggleBtn.setAttribute('aria-label', playing ? 'Play FX enabled. Click to Pause FX' : 'Pause FX enabled. Click to Play FX');
+      toggleBtn.classList.toggle('is-on', playing);
+      toggleBtn.classList.toggle('is-paused', paused);
+      if (toggleLabel) toggleLabel.textContent = playing ? 'Play FX' : 'Pause FX';
+      if (badge) {
+        badge.className = 'status-pill ' + (paused ? 'warn' : 'ok');
+        badge.textContent = paused ? 'FX Paused' : 'FX Playing';
+      }
+      if (announce) {
+        setFormStatus(
+          msgEl,
+          paused
+            ? 'Ambient FX paused. Order Block stage saves CPU & GPU until resumed.'
+            : 'Ambient FX enabled on Order Block stage.',
+          'ok'
+        );
+      }
+    };
+
+    const setFxPaused = paused => {
+      try {
+        localStorage.setItem('ob_fx_paused', paused ? '1' : '0');
+      } catch {
+        // Ignore storage restrictions
+      }
+      syncFxUi(Boolean(paused), true);
+    };
+
+    syncFxUi(readPaused(), false);
+    toggleBtn.addEventListener('click', () => setFxPaused(!readPaused()));
+    window.addEventListener?.('storage', e => {
+      if (e && e.key === 'ob_fx_paused') syncFxUi(e.newValue === '1', false);
+    });
+  };
+  initFxControls();
+
   const copyBtn = document.getElementById('copyRedirectBtn');
   const upstoxStatus = document.getElementById('upstoxStatusMsg');
   if (copyBtn) {

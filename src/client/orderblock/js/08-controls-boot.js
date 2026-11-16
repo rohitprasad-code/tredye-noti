@@ -233,7 +233,8 @@ function obControlsMount() {
   if (rail && !rail._mounted) {
     rail._mounted = true;
     const syncRailW = () => {
-      document.documentElement.style.setProperty("--rail-w", rail.offsetWidth + "px");
+      const targetW = document.body.classList.contains("rail-expanded") ? 190 : 54;
+      document.documentElement.style.setProperty("--rail-w", targetW + "px");
     };
     syncRailW();
     const toggleBtn = document.getElementById("obRailToggle");
@@ -241,8 +242,8 @@ function obControlsMount() {
       toggleBtn.addEventListener("click", () => {
         const exp = document.body.classList.toggle("rail-expanded");
         toggleBtn.textContent = exp ? "«" : "»";
+        syncRailW();
         requestAnimationFrame(() => {
-          syncRailW();
           if (typeof rerender === "function") rerender(true);
         });
       });
@@ -319,45 +320,59 @@ function obControlsMount() {
     });
   }
 
-  const motionBtn = bar.querySelector("#obMotionBtn");
-  if (motionBtn) {
-    const syncMotionBtn = () => {
-      const paused = Boolean(FX && FX.userPaused);
-      if (document.body && document.body.classList) document.body.classList.toggle("fx-paused", paused);
-      motionBtn.textContent = paused ? "Play FX" : "Pause FX";
-      motionBtn.setAttribute("aria-label", paused ? "Play ambient animations" : "Pause ambient animations");
-    };
-    syncMotionBtn();
-    motionBtn.addEventListener("click", () => {
-      FX.userPaused = !FX.userPaused;
+  const applyFxPaused = (paused, persist = false) => {
+    FX.userPaused = Boolean(paused);
+    if (persist) {
       try { localStorage.setItem("ob_fx_paused", FX.userPaused ? "1" : "0"); } catch (e) {}
-      syncMotionBtn();
-      if (typeof PULSE !== "undefined" && PULSE) {
-        PULSE.dirty = true;
-        if (FX.userPaused) obPulseRenderFrame(PULSE, performance.now());
-        else obPulseWake(PULSE);
-      }
-      wakeFx(true);
-    });
-  }
+    }
+    if (document.body && document.body.classList) document.body.classList.toggle("fx-paused", FX.userPaused);
+    if (typeof PULSE !== "undefined" && PULSE) {
+      PULSE.dirty = true;
+      if (FX.userPaused) obPulseRenderFrame(PULSE, performance.now());
+      else obPulseWake(PULSE);
+    }
+    wakeFx(true);
+  };
+  let initPaused = FX && FX.userPaused;
+  try { initPaused = localStorage.getItem("ob_fx_paused") === "1"; } catch (e) {}
+  applyFxPaused(initPaused, false);
+  window.addEventListener("storage", (e) => {
+    if (e && e.key === "ob_fx_paused") {
+      applyFxPaused(e.newValue === "1", false);
+    }
+  });
 
-  // Live clock ticker + real Upstox connection state
+  // Live clock ticker + real Upstox connection state + NSE market open/close countdown
   const clockEl = document.getElementById("obLiveClock");
-  if (clockEl) {
-    const updateClk = () => {
+  const mktWrap = document.getElementById("obMarketStatus");
+  const mktStateEl = document.getElementById("obMarketState");
+  const mktCountEl = document.getElementById("obMarketCount");
+  if (clockEl || mktWrap) {
+    const updateStatusAndClk = () => {
       const now = new Date();
-      const hrs = String(now.getHours()).padStart(2, '0');
-      const min = String(now.getMinutes()).padStart(2, '0');
-      const sec = String(now.getSeconds()).padStart(2, '0');
-      const st = (window.OBF_FEED && window.OBF_FEED.status) || {};
-      const prefix = st.tokenExpired ? "TOKEN EXPIRED" : (st.state || "LIVE");
-      clockEl.textContent = `${prefix} ${hrs}:${min}:${sec}`;
+      if (clockEl) {
+        const hrs = String(now.getHours()).padStart(2, '0');
+        const min = String(now.getMinutes()).padStart(2, '0');
+        const sec = String(now.getSeconds()).padStart(2, '0');
+        const st = (window.OBF_FEED && window.OBF_FEED.status) || {};
+        const prefix = st.tokenExpired ? "TOKEN EXPIRED" : (st.state || "LIVE");
+        clockEl.textContent = `${prefix} ${hrs}:${min}:${sec}`;
+      }
+      if (mktWrap && window.NSEMarketHours && typeof window.NSEMarketHours.getMarketStatus === "function") {
+        const ms = window.NSEMarketHours.getMarketStatus(now);
+        mktWrap.classList.toggle("is-open", Boolean(ms.open));
+        mktWrap.classList.toggle("is-closed", !ms.open);
+        if (mktStateEl) mktStateEl.textContent = ms.statusLabel;
+        if (mktCountEl) mktCountEl.textContent = `${ms.countdownAction} ${ms.countdownText}`;
+        mktWrap.setAttribute("title", ms.detailText);
+        mktWrap.setAttribute("aria-label", ms.detailText);
+      }
     };
     if (window.OBF_FEED) {
-      window.OBF_FEED.onStatus = () => updateClk();
+      window.OBF_FEED.onStatus = () => updateStatusAndClk();
     }
-    updateClk();
-    setInterval(updateClk, 1000);
+    updateStatusAndClk();
+    setInterval(updateStatusAndClk, 1000);
   }
 }
 
@@ -402,7 +417,7 @@ function computeScale() {
   S.reduced = Boolean(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   if (!S.stacked) {
     const railEl = document.getElementById('obSideRail');
-    const LEFT_RAIL_W = railEl ? (railEl.offsetWidth || (document.body.classList.contains('rail-expanded') ? 190 : 54)) : 0;
+    const LEFT_RAIL_W = railEl ? (document.body.classList.contains('rail-expanded') ? 190 : 54) : 0;
     const TOP_BAR_H = 36;
     const availH = Math.max(400, H - TOP_BAR_H);
     const availW = Math.max(600, W - LEFT_RAIL_W);

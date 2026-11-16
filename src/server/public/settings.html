@@ -9,13 +9,17 @@
   <link rel="stylesheet" href="/vendor/fonts.css">
   <link rel="stylesheet" href="/theme-ob.css">
   <link rel="stylesheet" href="/static/settings/settings.css">
+  <script defer src="/market-hours.js"></script>
   <script defer src="/nav-rail.js"></script>
   <script defer src="/settings.js"></script>
 </head>
 <body class="has-ob-rail settings-page">
   <main class="settings-main">
     <header class="settings-header">
-      <h1>Settings</h1>
+      <div class="settings-title-wrap">
+        <h1>Settings</h1>
+        <span id="settingsMarketPill" class="market-status-pill" role="status" aria-live="off" title="NSE session status (IST)">NSE Closed · opens —</span>
+      </div>
       <a href="/app/orderblock" class="btn-ui">← Back to Order Block</a>
     </header>
 
@@ -168,6 +172,25 @@
           </form>
         </div>
       </details>
+    </section>
+
+    <section class="card-section" id="fxSection" aria-labelledby="fxHeading">
+      <div class="card-head">
+        <h2 id="fxHeading">Display &amp; Ambient FX</h2>
+        <span id="fxStatusBadge" class="status-pill ok">FX Playing</span>
+      </div>
+
+      <p id="fxHelpText" class="help-text">
+        Control continuous background particles, spine comet, sweep light, tile shimmer, and glow pulses on the Order Block terminal. Live quotes and the hover inspector always stay active.
+      </p>
+
+      <div class="btn-row">
+        <button type="button" id="fxToggleBtn" class="btn-ui fx-toggle-btn is-on" role="switch" aria-checked="true" aria-label="Toggle ambient FX">
+          <span class="fx-switch-track" aria-hidden="true"><span class="fx-switch-thumb"></span></span>
+          <span id="fxToggleLabel" class="fx-toggle-label">Play FX</span>
+        </button>
+      </div>
+      <div id="fxStatusMsg" class="form-status" role="status" aria-live="polite"></div>
     </section>
 
     <section class="card-section" id="rulesSection" aria-labelledby="rulesHeading">

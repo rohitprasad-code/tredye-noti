@@ -9,12 +9,18 @@ export default function SettingsView() {
       <link rel="stylesheet" href="/vendor/fonts.css" />
       <link rel="stylesheet" href="/theme-ob.css" />
       <link rel="stylesheet" href="/static/settings/settings.css" />
+      <Script src="/market-hours.js" strategy="afterInteractive" />
       <Script src="/nav-rail.js" strategy="afterInteractive" />
       <Script src="/settings.js" strategy="afterInteractive" />
 
       <main className="settings-main">
         <header className="settings-header">
-          <h1>Settings</h1>
+          <div className="settings-title-wrap">
+            <h1>Settings</h1>
+            <span id="settingsMarketPill" className="market-status-pill" role="status" aria-live="off" title="NSE session status (IST)">
+              NSE Closed · opens —
+            </span>
+          </div>
           <a href="/app/orderblock" className="btn-ui">← Back to Order Block</a>
         </header>
 
@@ -185,6 +191,25 @@ export default function SettingsView() {
               </form>
             </div>
           </details>
+        </section>
+
+        <section className="card-section" id="fxSection" aria-labelledby="fxHeading">
+          <div className="card-head">
+            <h2 id="fxHeading">Display &amp; Ambient FX</h2>
+            <span id="fxStatusBadge" className="status-pill ok">FX Playing</span>
+          </div>
+
+          <p id="fxHelpText" className="help-text">
+            Control continuous background particles, spine comet, sweep light, tile shimmer, and glow pulses on the Order Block terminal. Live quotes and the hover inspector always stay active.
+          </p>
+
+          <div className="btn-row">
+            <button type="button" id="fxToggleBtn" className="btn-ui fx-toggle-btn is-on" role="switch" aria-checked="true" aria-label="Toggle ambient FX">
+              <span className="fx-switch-track" aria-hidden="true"><span className="fx-switch-thumb" /></span>
+              <span id="fxToggleLabel" className="fx-toggle-label">Play FX</span>
+            </button>
+          </div>
+          <div id="fxStatusMsg" className="form-status" role="status" aria-live="polite" />
         </section>
 
         <section className="card-section" id="rulesSection" aria-labelledby="rulesHeading">

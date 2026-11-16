@@ -34,19 +34,15 @@ export default function OrderBlockTopBar() {
             <option value="FLOW_SCORE">Strongest Flow</option>
           </select>
         </div>
+        <div className="ob-market-pill is-closed" id="obMarketStatus" role="status" aria-live="off" title="NSE session status (IST)">
+          <span className="ob-mkt-state" id="obMarketState">Closed</span>
+          <span className="ob-mkt-sep" aria-hidden="true">·</span>
+          <span className="ob-mkt-count" id="obMarketCount">opens —</span>
+        </div>
         <div className="ob-live-status">
           <span className="ob-live-dot">●</span>
           <span className="ob-live-txt" id="obLiveClock">LIVE</span>
         </div>
-        <button
-          type="button"
-          id="obMotionBtn"
-          className="ob-motion-btn"
-          title="Pause or play ambient animations"
-          aria-label="Pause ambient animations"
-        >
-          Pause FX
-        </button>
         <button type="button" id="obSyncBtn" className="ob-sync-btn" title="Refresh Live Data">
           ↻
         </button>

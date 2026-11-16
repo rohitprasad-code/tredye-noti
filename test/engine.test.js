@@ -1268,7 +1268,7 @@ test('POST /api/upstox/token verifies and saves 1-Year Analytics Token into isol
 
 test('settings.js resets token validation state cleanly after saving 1-Year Analytics Token without triggering red error', async () => {
   const vm = require('node:vm');
-  const scriptSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'server', 'public', 'settings.js'), 'utf8');
+  const scriptSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'client', 'settings', 'settings-controller.js'), 'utf8');
 
   const elements = new Map();
   const docListeners = new Map();
@@ -1519,12 +1519,11 @@ test('orderblock.html skips redundant rerenders, defers non-selected OHLC arrays
   const stage = mk('div', 'stage');
   ['crest', 'plumeWrap', 'chips', 'idxTags', 'ladderWrap', 'nodes', 'tiles', 'bridges', 'tickets', 'fxWrap', 'inspector', 'footer'].forEach(id => stage.appendChild(mk('div', id)));
   const topBar = mk('header', 'obTopBar');
-  const motionBtn = mk('button', 'obMotionBtn');
-  topBar.appendChild(motionBtn);
-  ['obSecSel', 'obSortSel', 'obSyncBtn', 'obLiveClock'].forEach(id => topBar.appendChild(mk('div', id)));
+  ['obSecSel', 'obSortSel', 'obSyncBtn', 'obLiveClock', 'obMarketStatus', 'obMarketState', 'obMarketCount'].forEach(id => topBar.appendChild(mk('div', id)));
 
   const gsapCalls = [];
   const rafQueue = [];
+  const winListeners = new Map();
   const ctx = vm.createContext({
     location: { search: '', origin: 'http://localhost:4600' },
     innerWidth: 2100,
@@ -1536,7 +1535,10 @@ test('orderblock.html skips redundant rerenders, defers non-selected OHLC arrays
       fromTo() {},
     },
     matchMedia: () => ({ matches: false, addEventListener() {} }),
-    addEventListener() {},
+    addEventListener(type, fn) {
+      if (!winListeners.has(type)) winListeners.set(type, []);
+      winListeners.get(type).push(fn);
+    },
     removeEventListener() {},
     CanvasRenderingContext2D: Object.assign(function () {}, {
       prototype: { fillStyle: '', strokeStyle: '', globalCompositeOperation: 'source-over', createLinearGradient() {}, createRadialGradient() {} },
@@ -1618,12 +1620,11 @@ test('orderblock.html skips redundant rerenders, defers non-selected OHLC arrays
   ctx.OBF_FEED.onUpdate(snapChanged);
   assert.notEqual(api.getM(), m1, 'changed stock price must trigger model rebuild');
 
-  // Toggle Pause FX button -> toggles fx-paused, updates label without aria-pressed, and halts idle fxLoop
-  assert.equal(motionBtn.hasAttribute('aria-pressed'), false);
-  motionBtn.dispatchEvent({ type: 'click' });
+  // Cross-tab storage event from Settings FX toggle -> toggles fx-paused and halts idle fxLoop
+  assert.equal(topBar.querySelector('#obMotionBtn'), null, 'main screen top bar must not render Pause/Play FX button');
+  (winListeners.get('storage') || []).forEach(fn => fn({ key: 'ob_fx_paused', newValue: '1' }));
   assert.equal(api.getFX().userPaused, true);
   assert.equal(ctx.document.body.classList.contains('fx-paused'), true);
-  assert.equal(motionBtn.textContent, 'Play FX');
   api.getFX().hover = null;
   api.getFX().pinned = null;
   api.getFX().flashes = [];
@@ -1900,6 +1901,147 @@ test('theme defaults to browser preference with no initial cookie and writes ob_
   assert.equal(jar2.store.has('ob_theme'), false);
   assert.equal(meta2.content, 'light dark');
 });
+
+test('NSE market status countdown and Settings Play/Pause FX controls work accurately', async () => {
+  const vm = require('node:vm');
+  const { getMarketStatus } = require('../src/market/hours');
+  const marketHoursSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'market', 'hours.js'), 'utf8');
+  const settingsCtrlSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'client', 'settings', 'settings-controller.js'), 'utf8');
+
+  // 1) Weekday evening (2026-11-16 19:50:09 IST) -> Closed · opens 13h 25m
+  const monEvening = getMarketStatus(new Date('2026-11-16T19:50:09+05:30'));
+  assert.equal(monEvening.open, false);
+  assert.equal(monEvening.phase, 'AFTER_CLOSE');
+  assert.equal(monEvening.shortText, 'Closed · opens 13h 25m');
+  assert.equal(monEvening.targetTimeText, 'Tue 09:15 IST');
+
+  // 2) Trading hours (2026-11-17 13:15:00 IST) -> Open · closes 2h 15m
+  const tueMidday = getMarketStatus(new Date('2026-11-17T13:15:00+05:30'));
+  assert.equal(tueMidday.open, true);
+  assert.equal(tueMidday.phase, 'LIVE');
+  assert.equal(tueMidday.shortText, 'Open · closes 2h 15m');
+  assert.equal(tueMidday.targetTimeText, 'Today 15:30 IST');
+
+  // 3) Final minute before close (2026-11-17 15:29:15 IST) -> Open · closes 45s
+  const tueClosing = getMarketStatus(new Date('2026-11-17T15:29:15+05:30'));
+  assert.equal(tueClosing.open, true);
+  assert.equal(tueClosing.shortText, 'Open · closes 45s');
+
+  // 4) Weekend skip: Friday evening (2026-11-20 16:00:00 IST) -> skips Sat/Sun to Mon 09:15 IST
+  const friEvening = getMarketStatus(new Date('2026-11-20T16:00:00+05:30'));
+  assert.equal(friEvening.open, false);
+  assert.equal(friEvening.shortText, 'Closed · opens 2d 17h 15m');
+  assert.equal(friEvening.targetTimeText, 'Mon 09:15 IST');
+
+  // 5) NSE holiday skip: Monday 2026-11-23 16:00:00 IST skips 2026-11-24 (Gurunanak Jayanti) -> Wed 09:15 IST
+  const beforeHoliday = getMarketStatus(new Date('2026-11-23T16:00:00+05:30'));
+  assert.equal(beforeHoliday.open, false);
+  assert.equal(beforeHoliday.targetTimeText, 'Wed 09:15 IST');
+  assert.equal(beforeHoliday.shortText, 'Closed · opens 1d 17h 15m');
+
+  // 6) Settings page Play FX / Pause FX controls + Market Status pill
+  const storage = new Map([['ob_fx_paused', '0']]);
+  const elements = new Map();
+  const mkNode = id => {
+    const attrs = new Map();
+    const listeners = new Map();
+    const cls = new Set();
+    const node = {
+      id,
+      className: '',
+      textContent: '',
+      title: '',
+      classList: {
+        add: (...a) => a.forEach(x => cls.add(x)),
+        remove: (...a) => a.forEach(x => cls.delete(x)),
+        toggle: (c, f) => (f === undefined ? (cls.has(c) ? (cls.delete(c), false) : (cls.add(c), true)) : (f ? cls.add(c) : cls.delete(c), f)),
+        contains: c => cls.has(c),
+      },
+      setAttribute: (k, v) => attrs.set(k, String(v)),
+      getAttribute: k => (attrs.has(k) ? attrs.get(k) : null),
+      addEventListener: (t, fn) => {
+        if (!listeners.has(t)) listeners.set(t, []);
+        listeners.get(t).push(fn);
+      },
+      click: async () => {
+        for (const fn of listeners.get('click') || []) await fn();
+      },
+    };
+    elements.set(id, node);
+    return node;
+  };
+  const toggleBtn = mkNode('fxToggleBtn');
+  const toggleLabel = mkNode('fxToggleLabel');
+  const fxBadge = mkNode('fxStatusBadge');
+  const fxMsg = mkNode('fxStatusMsg');
+  const mktPill = mkNode('settingsMarketPill');
+
+  const RealDate = Date;
+  const fixedNow = new RealDate('2026-11-16T19:50:09+05:30');
+  const MockDate = function (...a) {
+    return a.length ? new RealDate(...a) : new RealDate(fixedNow.getTime());
+  };
+  MockDate.now = () => fixedNow.getTime();
+  MockDate.UTC = RealDate.UTC;
+
+  const ctx = vm.createContext({
+    document: {
+      body: { append() {} },
+      createElement: () => mkNode(''),
+      getElementById: id => elements.get(id) || null,
+      querySelectorAll: () => [],
+      addEventListener() {},
+    },
+    CSS: { supports: () => true },
+    Intl, Date: MockDate, WeakMap, WeakSet, Map, Set, URL, JSON, Number, String, Boolean, Math, Array, Object,
+    navigator: {},
+    window: { addEventListener() {} },
+    localStorage: {
+      getItem: k => (storage.has(k) ? storage.get(k) : null),
+      setItem: (k, v) => storage.set(k, String(v)),
+    },
+    setTimeout,
+    clearTimeout,
+    setInterval() {},
+    fetch: async () => ({ ok: true, json: async () => ({ upstox: {}, config: {} }) }),
+  });
+  ctx.window = ctx;
+  ctx.globalThis = ctx;
+  vm.runInContext(marketHoursSrc, ctx);
+  vm.runInContext(settingsCtrlSrc, ctx);
+  await new Promise(r => setImmediate(r));
+
+  assert.equal(mktPill.textContent, 'NSE Closed · opens 13h 25m');
+  assert.equal(toggleBtn.getAttribute('aria-checked'), 'true');
+  assert.equal(toggleLabel.textContent, 'Play FX');
+  assert.equal(fxBadge.textContent, 'FX Playing');
+
+  // Toggle FX switch button -> pauses FX (ob_fx_paused=1)
+  await toggleBtn.click();
+  assert.equal(storage.get('ob_fx_paused'), '1');
+  assert.equal(toggleBtn.getAttribute('aria-checked'), 'false');
+  assert.equal(toggleBtn.classList.contains('is-paused'), true);
+  assert.equal(toggleLabel.textContent, 'Pause FX');
+  assert.equal(fxBadge.textContent, 'FX Paused');
+  assert.ok(fxMsg.textContent.toLowerCase().includes('paused'));
+
+  // Toggle again -> resumes Play FX (ob_fx_paused=0)
+  await toggleBtn.click();
+  assert.equal(storage.get('ob_fx_paused'), '0');
+  assert.equal(toggleBtn.getAttribute('aria-checked'), 'true');
+  assert.equal(toggleBtn.classList.contains('is-on'), true);
+  assert.equal(toggleLabel.textContent, 'Play FX');
+  assert.equal(fxBadge.textContent, 'FX Playing');
+
+  // Main screen HTML/component no longer render obMotionBtn; market pill shares 7px curve with live timer
+  const obHtml = fs.readFileSync(path.join(__dirname, '..', 'src', 'server', 'public', 'orderblock.html'), 'utf8');
+  const obTopBarJsx = fs.readFileSync(path.join(__dirname, '..', 'src', 'components', 'OrderBlockTopBar.jsx'), 'utf8');
+  const shellCss = fs.readFileSync(path.join(__dirname, '..', 'src', 'client', 'orderblock', 'css', '03-shell-ui.css'), 'utf8');
+  assert.equal(obHtml.includes('id="obMotionBtn"'), false);
+  assert.equal(obTopBarJsx.includes('id="obMotionBtn"'), false);
+  assert.match(shellCss, /\.ob-market-pill\s*\{[^}]*border-radius:\s*7px;/);
+});
+
 
 
 

@@ -227,6 +227,9 @@ function createDashboardServer(appController) {
   app.get(['/settings.js', '/static/settings/settings-controller.js'], (_req, res) => {
     res.sendFile(path.join(CLIENT_SETTINGS_DIR, 'settings-controller.js'));
   });
+  app.get('/market-hours.js', (_req, res) => {
+    res.sendFile(path.resolve(__dirname, '../market/hours.js'));
+  });
 
   // Order Block Terminal & dedicated Settings page
   app.get(['/', '/app', '/app/orderblock'], (_req, res) => {
