@@ -1,16 +1,31 @@
 /* ================= FX: particles, comet, sweep, shimmer, brushing ================= */
 let OB_FX_PAUSED = false;
 try { OB_FX_PAUSED = localStorage.getItem('ob_fx_paused') === '1'; } catch (e) {}
+const FX_IDLE_MS = 45000;
 const FX = {
-  cv: null, ctx: null, paths: [], parts: [], flashes: [], sprites: {}, sweepStrip: null, weightedTiles: [],
+  cv: null, ctx: null, paths: [], parts: [], flashes: [], sprites: {}, flashSprites: {}, sweepStrip: null, weightedTiles: [],
   running: false, last: 0, lastDraw: 0, frameAvg: 16, ambient: false, userPaused: OB_FX_PAUSED,
+  winBlurred: false, idleSleeping: false, lastInputAt: 0, fxScale: 1,
   dirty: false, hover: null, pinned: null, showT0: 0, show: false,
   moveRaf: 0, pendingMove: null, lastMoveTarget: null, lastMoveMs: 0,
 };
 if (OB_FX_PAUSED && document.body && document.body.classList) document.body.classList.add('fx-paused');
+function syncFxIdleClass() {
+  const isIdle = Boolean(document.hidden || FX.winBlurred || FX.idleSleeping);
+  if (document.body && document.body.classList) document.body.classList.toggle('fx-idle', isIdle);
+}
+function noteFxActivity() {
+  FX.lastInputAt = performance.now();
+  if (FX.idleSleeping) {
+    FX.idleSleeping = false;
+    syncFxIdleClass();
+    if (!S.stacked) wakeFx(true);
+    if (typeof PULSE !== 'undefined' && PULSE) obPulseWake(PULSE);
+  }
+}
 function wakeFx(dirty) {
   if (dirty) FX.dirty = true;
-  if (!FX.running && !document.hidden) {
+  if (!FX.running && !document.hidden && (!FX.winBlurred || dirty || FX.show)) {
     FX.running = true; FX.last = 0; FX.lastDraw = 0;
     requestAnimationFrame(fxLoop);
   }
@@ -65,20 +80,33 @@ function buildSweepStrip() {
 }
 function buildFx() {
   const wrap = $('#fxWrap'); wrap.innerHTML = '';
-  const o = stageCanvas(wrap, 0, 0, (G && G.W) || 1920, G.Hd, ''); o.cv.id = 'cvFx'; FX.cv = o.cv; FX.ctx = o.ctx;
+  const w = (G && G.W) || 1920, h = G.Hd;
+  const cv = el('canvas', 'cv', wrap);
+  css(cv, { left: 0, top: 0, width: w, height: h });
+  const k = Math.min(1.25, S.k || 1);
+  cv.width = Math.max(1, Math.round(w * k)); cv.height = Math.max(1, Math.round(h * k));
+  const ctx = cv.getContext('2d'); ctx.setTransform(k, 0, 0, k, 0, 0);
+  cv._x = 0; cv._y = 0; cv._w = w; cv._h = h; cv.id = 'cvFx';
+  FX.cv = cv; FX.ctx = ctx; FX.fxScale = k;
   FX.sprites = { 1: glowSprite(SC[1], 5), '-1': glowSprite(SC[-1], 5), w: glowSprite('232,241,255', 6), a: glowSprite('255,176,32', 5) };
+  FX.flashSprites = {
+    [SC[1]]: glowSprite(SC[1], 10),
+    [SC[-1]]: glowSprite(SC[-1], 10),
+    '232,241,255': glowSprite('232,241,255', 12),
+    '255,176,32': glowSprite('255,176,32', 10),
+  };
   FX.sweepStrip = FX.sweepStrip || buildSweepStrip();
   // particle paths
   FX.paths = []; const cw = 524 / 125;
   M.selected.forEach(s => {
     if (s.event) return; const side = s.side;
-    const cb = Math.floor((s.ubPlume || s.ub) * 125) + 1; FX.paths.push({ kind: 'thread', side, s, p: polyPath(threadPts(s, cb)), v: 40, n: 2 });
+    const cb = Math.floor((s.ubPlume || s.ub) * 125) + 1; FX.paths.push({ kind: 'thread', side, s, p: polyPath(threadPts(s, cb)), v: 40, n: 1 });
     const y = G.laneY(s.lane); FX.paths.push({ kind: 'bar', side, s, p: polyPath([[592, y], [690, y]]), v: 80, n: 1 });
-    FX.paths.push({ kind: 'fibre', side, s, p: polyPath(bezPts(fibrePath(G, s), 40)), v: 120, n: 2 });
+    FX.paths.push({ kind: 'fibre', side, s, p: polyPath(bezPts(fibrePath(G, s), 40)), v: 120, n: 1 });
   });
-  G.tickets.forEach(tk => { if (tk.event) return; FX.paths.push({ kind: 'bridge', side: tk.side, s: tk.s, p: polyPath([[1340, tk.cy], [1368, tk.cy]]), v: 170, n: 3, tk }); });
+  G.tickets.forEach(tk => { if (tk.event) return; FX.paths.push({ kind: 'bridge', side: tk.side, s: tk.s, p: polyPath([[1340, tk.cy], [1368, tk.cy]]), v: 170, n: 2, tk }); });
   FX.spine = polyPath(spinePts(G).pts.map(p => [p[0], p[1]]));
-  const cap = S.stacked ? 80 : 280;
+  const cap = S.stacked ? 40 : 96;
   FX.parts = []; const r = mulberry32(7);
   FX.paths.forEach((pa, i) => { for (let k = 0; k < pa.n; k++) FX.parts.push({ pi: i, d: r() * pa.p.L, a: 0.5 + 0.5 * r() }); });
   if (FX.parts.length > cap) FX.parts.length = cap;
@@ -92,16 +120,24 @@ function buildFx() {
       }
     });
   }
+  FX.lastInputAt = performance.now();
+  FX.idleSleeping = false;
+  syncFxIdleClass();
   FX.dirty = true;
 }
-function flash(x, y, r, rgb, dur, a = 1) { FX.flashes.push({ x, y, r, rgb, t0: performance.now(), dur, a }); wakeFx(true); }
-function nodeFlare(id) { const n = document.getElementById(id); if (!n) return; n.classList.remove('flare'); void n.offsetWidth; n.classList.add('flare'); }
+function flash(x, y, r, rgb, dur, a = 1, wake = true) { FX.flashes.push({ x, y, r, rgb, t0: performance.now(), dur, a }); if (wake) wakeFx(false); }
+function nodeFlare(id) {
+  const n = document.getElementById(id);
+  if (!n || n.classList.contains('flare')) return;
+  n.classList.add('flare');
+  setTimeout(() => n.classList.remove('flare'), 240);
+}
 
 /* ---- tile shimmer ---- */
 function shimmerStep(now) {
   const weighted = FX.weightedTiles;
   if (!weighted || !weighted.length) return;
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < 2; i++) {
     const t = weighted[Math.floor(Math.random() * weighted.length)]; const k = Math.floor(Math.random() * t.rd.rows);
     t.mul0[k] = t.mul[k]; t.mulT[k] = 0.9 + Math.random() * 0.2; t.tw[k] = now;
   }
@@ -120,11 +156,11 @@ function shimmerUpdate(now) {
       if (f >= 1) t.tw[k] = -1;
       dirty = true;
     }
-    if (dirty && (!t.lastDraw || now - t.lastDraw > 160)) {
+    if (dirty && (!t.lastDraw || now - t.lastDraw > 400)) {
       t.lastDraw = now;
-      drawTileCanvas(t, 1e9);
+      drawTileCanvas(t, 1e9, true);
       shimCount++;
-      if (shimCount >= 3) break;
+      if (shimCount >= 1) break;
     }
   }
 }
@@ -133,29 +169,43 @@ function shimmerUpdate(now) {
 let SHIM_LAST = 0, COMET_T0 = 0, SWEEP_T0 = 0;
 function fxLoop(now) {
   if (!FX.running) return;
-  if (document.hidden) { FX.running = false; return; }
+  if (document.hidden) { FX.running = false; syncFxIdleClass(); return; }
+  if (!FX.show && !FX.dirty && FX.lastInputAt > 0 && now - FX.lastInputAt > FX_IDLE_MS && !FX.pinned && !FX.hover) {
+    FX.idleSleeping = true;
+    FX.running = false;
+    syncFxIdleClass();
+    return;
+  }
   const h = FX.pinned || FX.hover;
-  const ambientOn = FX.ambient && !S.reduced && !FX.userPaused;
+  const ambientOn = FX.ambient && !S.reduced && !FX.userPaused && !FX.winBlurred && !FX.idleSleeping;
   const revActive = Boolean(h && h.rev && now - h.rev < 500);
-  const busy = FX.show || FX.flashes.length > 0 || FX.packets.length > 0 || revActive;
+  const fastBusy = FX.show || revActive;
+  const ambientBusy = !FX.userPaused && !FX.winBlurred && !FX.idleSleeping && (FX.flashes.length > 0 || FX.packets.length > 0);
   const hoverAnimating = Boolean(h && ambientOn);
-  const keepLoop = busy || hoverAnimating || ambientOn;
+  const keepLoop = fastBusy || ambientBusy || hoverAnimating || ambientOn;
   if (!keepLoop) {
     if (!FX.dirty) { FX.running = false; return; }
   } else {
     requestAnimationFrame(fxLoop);
   }
-  if (!busy && !FX.dirty && FX.lastDraw && now - FX.lastDraw < 30) return;
+  const minInterval = (fastBusy || FX.dirty) ? 16 : h ? 33 : 50;
+  if (!fastBusy && !FX.dirty && FX.lastDraw && now - FX.lastDraw < minInterval) return;
   const dt = Math.min(64, now - (FX.last || now)); FX.last = now; FX.lastDraw = now;
   FX.frameAvg = FX.frameAvg * 0.95 + dt * 0.05;
   if (FX.show) showUpdate(now);
   const ctx = FX.ctx; if (!ctx) { FX.running = keepLoop; return; }
   ctx.clearRect(0, 0, (G && G.W) || 1920, G.Hd);
   if (ambientOn) {
-    if (obState() === 'LIVE') { if (now - SHIM_LAST > 180) { SHIM_LAST = now; shimmerStep(now); } shimmerUpdate(now); }
+    if (obState() === 'LIVE') { if (now - SHIM_LAST > 1800) { SHIM_LAST = now; shimmerStep(now); } shimmerUpdate(now); }
     drawParticles(ctx, dt, now);
     drawComet(ctx, now);
     drawSweep(ctx, now);
+    if (typeof PULSE !== 'undefined' && PULSE && !PULSE.stacked && !PULSE.off) {
+      if (PULSE.dirty || !PULSE.last || now - PULSE.last >= 50) {
+        PULSE.last = now;
+        obPulseRenderFrame(PULSE, now);
+      }
+    }
   }
   drawFlashes(ctx, now);
   drawBrush(ctx, now);
@@ -163,15 +213,16 @@ function fxLoop(now) {
   if (!keepLoop) FX.running = false;
 }
 function drawParticles(ctx, dt, now) {
-  if (FX.frameAvg > 20 && FX.parts.length > 60) FX.parts.length = Math.floor(FX.parts.length / 2);
+  if (FX.frameAvg > 18 && FX.parts.length > 36) FX.parts.length = Math.floor(FX.parts.length / 2);
   ctx.save(); ctx.globalCompositeOperation = 'lighter';
   FX.parts.forEach(pt => {
     const pa = FX.paths[pt.pi]; pt.d += pa.v * dt / 1000;
     if (pt.d >= pa.p.L) {
       pt.d -= pa.p.L;
-      const e = pa.p.pts[pa.p.pts.length - 1];
-      if (pa.kind === 'fibre' || pa.kind === 'bridge') flash(e[0], e[1], pa.kind === 'bridge' ? 9 : 6, SC[pa.side], 250, .5);
-      if (pa.kind === 'bridge' && pa.tk && pa.tk.el) { const acc = pa.tk.el.querySelector('.acc'); }
+      if (pa.kind === 'bridge') {
+        const e = pa.p.pts[pa.p.pts.length - 1];
+        flash(e[0], e[1], 8, SC[pa.side], 220, .45, false);
+      }
     }
     const [x, y] = pathAt(pa.p, pt.d); const sp = FX.sprites[pa.side];
     const sz = pa.kind === 'bridge' ? 12 : pa.kind === 'fibre' ? 9 : 8;
@@ -195,9 +246,19 @@ function drawComet(ctx, now) {
 }
 FX.packets = [];
 function drawPackets(ctx, now) {
+  if (!FX.packets.length) return;
   ctx.save(); ctx.globalCompositeOperation = 'lighter';
   FX.packets = FX.packets.filter(pk => {
-    const f = (now - pk.t0) / 200; if (f > 1) { if (pk.tk.el) { const a = pk.tk.el.querySelector('.acc'); if (a) { a.classList.remove('pulse'); void a.offsetWidth; a.classList.add('pulse'); } } if (pk.onLand) pk.onLand(); return false; }
+    const f = (now - pk.t0) / 200;
+    if (f > 1) {
+      const a = pk.tk.accEl || (pk.tk.el && (pk.tk.accEl = pk.tk.el.querySelector('.acc')));
+      if (a && !a.classList.contains('pulse')) {
+        a.classList.add('pulse');
+        setTimeout(() => a.classList.remove('pulse'), 920);
+      }
+      if (pk.onLand) pk.onLand();
+      return false;
+    }
     const x = 1340 + 28 * f, y = pk.tk.cy; ctx.globalAlpha = 1; ctx.drawImage(FX.sprites.w, x - 8, y - 8, 16, 16); ctx.drawImage(FX.sprites[pk.tk.side], x - 10, y - 10, 20, 20); return true;
   });
   ctx.restore();
@@ -224,7 +285,14 @@ function drawFlashes(ctx, now) {
   FX.flashes = FX.flashes.filter(f => {
     const k = (now - f.t0) / f.dur; if (k > 1) return false; if (k < 0) return true;
     if (f.rect) { ctx.globalAlpha = f.a * (1 - k); ctx.fillStyle = `rgba(${f.rgb},1)`; ctx.fillRect(f.rect[0], f.rect[1], f.rect[2], f.rect[3]); return true; }
-    const r = f.r * (0.6 + 0.8 * k); const g = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, r);
+    const r = f.r * (0.6 + 0.8 * k);
+    const sp = FX.flashSprites && FX.flashSprites[f.rgb];
+    if (sp) {
+      ctx.globalAlpha = f.a * (1 - k);
+      ctx.drawImage(sp, f.x - r, f.y - r, 2 * r, 2 * r);
+      return true;
+    }
+    const g = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, r);
     g.addColorStop(0, `rgba(255,255,255,${f.a * (1 - k)})`); g.addColorStop(.3, `rgba(${f.rgb},${f.a * (1 - k) * .8})`); g.addColorStop(1, `rgba(${f.rgb},0)`);
     ctx.globalAlpha = 1; ctx.fillStyle = g; ctx.fillRect(f.x - r, f.y - r, 2 * r, 2 * r); return true;
   });
@@ -910,6 +978,7 @@ function obRestoreHoverAfterRender(prevHover) {
 function bindInteractions() {
   const st = $('#stage'); if (st._bound) return; st._bound = true;
   const handleMove = e => {
+    noteFxActivity();
     FX.lastMoveMs = performance.now();
     FX.lastMoveTarget = e.target;
     FX.ptr = [e.clientX, e.clientY]; if (FX.show) return;   // the build show plays untouched: the hover waits for its end
@@ -917,6 +986,7 @@ function bindInteractions() {
   };
   st.addEventListener('mousemove', e => {
     if (S.stacked) return;
+    noteFxActivity();
     const now = performance.now();
     if (FX.lastMoveTarget === e.target && FX.lastMoveMs && now - FX.lastMoveMs < 16) {
       FX.pendingMove = { clientX: e.clientX, clientY: e.clientY, target: e.target };
@@ -934,6 +1004,7 @@ function bindInteractions() {
   });
   st.addEventListener('mouseleave', () => { FX.ptr = null; FX.pendingMove = null; FX.lastMoveTarget = null; setBrush(null); });
   st.addEventListener('click', e => {
+    noteFxActivity();
     const card = e.target && e.target.closest ? e.target.closest('.ticket, .tile, .anom') : null;
     if (card) {
       const sym = card.dataset && card.dataset.k;
@@ -953,14 +1024,29 @@ function bindInteractions() {
     if (FX.hover) FX.pinned = Object.assign({}, FX.hover);
   });
   window.addEventListener('keydown', e => {
+    noteFxActivity();
     if (e.key === 'Escape') { FX.pinned = null; FX.hover = null; applyBrush(null); }
     if ((e.key === 'r' || e.key === 'R') && !e.metaKey && !e.ctrlKey && !S.stacked) startShow();
   });
+  window.addEventListener('blur', () => {
+    FX.winBlurred = true;
+    FX.running = false;
+    syncFxIdleClass();
+  });
+  window.addEventListener('focus', () => {
+    FX.winBlurred = false;
+    noteFxActivity();
+    syncFxIdleClass();
+    if (!S.stacked) wakeFx(true);
+    if (typeof PULSE !== 'undefined' && PULSE) obPulseWake(PULSE);
+  });
   const br = $('#brand'); st.addEventListener('dblclick', e => { if (e.target.closest('#brand, #crest .pulse')) startShow(); });
   document.addEventListener('visibilitychange', () => {
+    syncFxIdleClass();
     if (document.hidden) {
       FX.running = false;
     } else {
+      noteFxActivity();
       if (!S.stacked) wakeFx(true);
       if (typeof PULSE !== 'undefined' && PULSE) obPulseWake(PULSE);
     }

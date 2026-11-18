@@ -58,6 +58,7 @@
       var es = new EventSource("/api/events");
       var lastPoll = 0;
       var lastReloadAt = 0;
+      var staleWhileHidden = false;
       es.addEventListener("state", function (ev) {
         try {
           var st = JSON.parse(ev.data);
@@ -72,13 +73,26 @@
           if (st && st.lastPollAt && st.lastPollAt !== lastPoll) {
             var now = Date.now();
             if (lastPoll !== 0 && now - lastReloadAt >= 2500) {
-              lastReloadAt = now;
-              load();
+              if (typeof document !== "undefined" && document.hidden) {
+                staleWhileHidden = true;
+              } else {
+                lastReloadAt = now;
+                load();
+              }
             }
             lastPoll = st.lastPollAt;
           }
         } catch (e) {}
       });
+      if (typeof document !== "undefined" && document.addEventListener) {
+        document.addEventListener("visibilitychange", function () {
+          if (!document.hidden && staleWhileHidden) {
+            staleWhileHidden = false;
+            lastReloadAt = Date.now();
+            load();
+          }
+        });
+      }
       es.addEventListener("upstox", function (ev) {
         try {
           var u = JSON.parse(ev.data);
@@ -94,5 +108,8 @@
       });
     } catch (e) {}
   }
-  if (!PEEK) setInterval(function () { load(); }, 60000);
+  if (!PEEK) setInterval(function () {
+    if (typeof document !== "undefined" && document.hidden) return;
+    load();
+  }, 60000);
 })();

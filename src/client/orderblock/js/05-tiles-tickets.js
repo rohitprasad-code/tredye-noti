@@ -95,7 +95,7 @@ function tileRows(s, w, h, headPx = 0, key = 'c3') {
   const vwRow = s.vwapEnd && s.vwapEnd <= hi && s.vwapEnd >= lo ? rowOf(s.vwapEnd) : -1;
   return { rows, pitch, bar, ltpRow, R, obR0, obR1, bias, rowOf, hi, lo, vwRow };
 }
-function drawTileCanvas(T, ms) {
+function drawTileCanvas(T, ms, fast) {
   const { ctx } = T; const s = T.s, w = T.w, h = T.h, side = s.side; const D = T.rd;
   if (!ctx || !D) return;
   ctx.clearRect(0, 0, w, h);
@@ -119,7 +119,7 @@ function drawTileCanvas(T, ms) {
     let cb = RAMP_C[1](r.t), ca = RAMP_C[-1](r.t);
     if (ev) { const g1 = (cb[0] + cb[1] + cb[2]) / 3, g2 = (ca[0] + ca[1] + ca[2]) / 3; cb = mixRgb(cb, [g1, g1, g1], .75); ca = mixRgb(ca, [g2, g2, g2], .75); }
     const bl = Math.max(0, r.bid * f * mul), al = Math.max(0, r.ask * f * mul);
-    const glow = r.hot && !ev && (pick || T.key === 'c2');
+    const glow = !fast && r.hot && !ev && (pick || T.key === 'c2');
     if (glow) { ctx.save(); ctx.shadowBlur = pick ? 7 : 4; ctx.shadowColor = `rgba(${rgb},.85)`; }
     // the minority side of the book is drawn a touch quieter so the dominant flow reads first
     ctx.fillStyle = rgbStr(cb, a * (side > 0 || ev ? 1 : .74)); ctx.fillRect(1, r.y, bl, D.bar);
@@ -146,9 +146,9 @@ function drawTileCanvas(T, ms) {
   if (D.obR0 >= 0 && ms > 120) {
     const y0 = D.R[D.obR0].y - 1, y1 = D.R[D.obR1].y + D.bar + 1; const x0 = Math.round(0.16 * w);
     if (!T.pick) { ctx.fillStyle = `rgba(${rgb},.13)`; ctx.fillRect(x0, y0, w - x0, y1 - y0); }
-    if (T.pick) { ctx.save(); ctx.shadowBlur = 6; ctx.shadowColor = `rgba(${rgb},.9)`; }
+    if (T.pick && !fast) { ctx.save(); ctx.shadowBlur = 6; ctx.shadowColor = `rgba(${rgb},.9)`; }
     ctx.fillStyle = `rgba(${rgb},.9)`; ctx.fillRect(x0, side > 0 ? y0 : y1 - 1, w - x0, 1);
-    if (T.pick) ctx.restore();
+    if (T.pick && !fast) ctx.restore();
     ctx.fillStyle = `rgba(${rgb},.35)`; ctx.fillRect(x0, side > 0 ? y1 - 1 : y0, w - x0, 1);
     ctx.fillStyle = rgba(hot, .85); ctx.fillRect(x0, y0, 3, y1 - y0);
     // FVG
@@ -174,7 +174,8 @@ function drawTileCanvas(T, ms) {
     ctx.fillStyle = '#F4F7FF'; ctx.beginPath(); ctx.moveTo(w, ly - 3.5); ctx.lineTo(w - 5, ly); ctx.lineTo(w, ly + 3.5); ctx.closePath(); ctx.fill();
     if (w >= 130) {
       const txt = inr(s.l); const fs = S.stacked ? 10 : Math.max(9 * S.tx, 9 / (S.s || 1)); ctx.font = `600 ${fs}px ${FONT_NUM}`;
-      const cw = Math.ceil(ctx.measureText(txt).width) + 8, ch = Math.round(fs + 4);
+      const cw = T.ltpCw && T.ltpTxt === txt && T.ltpFs === fs ? T.ltpCw : (T.ltpTxt = txt, T.ltpFs = fs, T.ltpCw = Math.ceil(ctx.measureText(txt).width) + 8);
+      const ch = Math.round(fs + 4);
       const bx = w - 7 - cw;
       let cy = ly;
       const pb = T.plateBox; // keep the chip clear of the label plate
@@ -183,8 +184,9 @@ function drawTileCanvas(T, ms) {
       if (rb && bx + cw > rb.l - 2 && cy - ch / 2 < rb.b + 2 && cy + ch / 2 > rb.t - 2) cy = rb.b + 3 + ch / 2;
       cy = clamp(cy, ch / 2 + 2, h - ch / 2 - 5);
       if (Math.abs(cy - ly) > 3) { ctx.fillStyle = 'rgba(244,247,255,.5)'; ctx.fillRect(w - 6, Math.min(ly, cy), 1, Math.abs(cy - ly)); }
-      ctx.save(); ctx.shadowBlur = 6; ctx.shadowColor = 'rgba(0,0,0,.6)';
-      ctx.fillStyle = 'rgba(236,242,250,.94)'; roundRect(ctx, bx, Math.round(cy - ch / 2), cw, ch, 2); ctx.fill(); ctx.restore();
+      if (!fast) { ctx.save(); ctx.shadowBlur = 6; ctx.shadowColor = 'rgba(0,0,0,.6)'; }
+      ctx.fillStyle = 'rgba(236,242,250,.94)'; roundRect(ctx, bx, Math.round(cy - ch / 2), cw, ch, 2); ctx.fill();
+      if (!fast) ctx.restore();
       ctx.fillStyle = '#05070B'; ctx.textBaseline = 'middle'; ctx.textAlign = 'left'; ctx.fillText(txt, bx + 4, Math.round(cy - ch / 2) + ch / 2 + .5);
       T.ltpBox = { x0: bx, x1: bx + cw, y0: cy - ch / 2, y1: cy + ch / 2 };  // lets the hover chain step around the chip
     }

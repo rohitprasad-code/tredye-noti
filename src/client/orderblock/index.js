@@ -22,23 +22,41 @@ const STAGE_JS_MODULES = [
 ];
 
 let cachedCssBundle = null;
+let cachedCssMtime = 0;
 let cachedLightCss = null;
+let cachedLightMtime = 0;
 let cachedJsBundle = null;
+let cachedJsMtime = 0;
 
 function readModule(dir, name) {
   return fs.readFileSync(path.join(dir, name), 'utf8');
 }
 
+function maxMtime(dir, names) {
+  let max = 0;
+  for (const name of names) {
+    try {
+      const m = fs.statSync(path.join(dir, name)).mtimeMs;
+      if (m > max) max = m;
+    } catch {}
+  }
+  return max;
+}
+
 function getOrderBlockCssBundle() {
-  if (!cachedCssBundle) {
+  const mtime = maxMtime(CSS_DIR, DARK_CSS_FILES);
+  if (!cachedCssBundle || mtime !== cachedCssMtime) {
     cachedCssBundle = DARK_CSS_FILES.map((name) => `/* === ${name} === */\n${readModule(CSS_DIR, name)}`).join('\n');
+    cachedCssMtime = mtime;
   }
   return cachedCssBundle;
 }
 
 function getOrderBlockLightCss() {
-  if (!cachedLightCss) {
+  const mtime = maxMtime(CSS_DIR, [LIGHT_CSS_FILE]);
+  if (!cachedLightCss || mtime !== cachedLightMtime) {
     cachedLightCss = `/* === ${LIGHT_CSS_FILE} === */\n${readModule(CSS_DIR, LIGHT_CSS_FILE)}`;
+    cachedLightMtime = mtime;
   }
   return cachedLightCss;
 }
@@ -52,9 +70,11 @@ function getOrderBlockTestScripts() {
 }
 
 function getOrderBlockJsBundle() {
-  if (!cachedJsBundle) {
+  const mtime = maxMtime(JS_DIR, ['01-theme-canvas.js', '02-live-feed.js', ...STAGE_JS_MODULES]);
+  if (!cachedJsBundle || mtime !== cachedJsMtime) {
     const [s1, s2, s3] = getOrderBlockTestScripts();
     cachedJsBundle = `/* === 01-theme-canvas.js === */\n${s1}\n/* === 02-live-feed.js === */\n${s2}\n/* === 03..08 OrderBlock Stage Engine === */\n${s3}`;
+    cachedJsMtime = mtime;
   }
   return cachedJsBundle;
 }

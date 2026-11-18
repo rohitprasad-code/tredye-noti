@@ -680,9 +680,12 @@ function phObserve() {
 
 /* ---------------- one phone rAF loop (the motion layer adds frames with phFrame) ---------------- */
 function phFrame(fn) { PH.frames.add(fn); phLoopKick(); return fn; }
-function phLoopKick() { if (PH.looping || !PH.frames.size || document.hidden) return; PH.looping = true; requestAnimationFrame(phLoop); }
+function phLoopKick() {
+  if (PH.looping || !PH.frames.size || document.hidden || (typeof FX !== 'undefined' && (FX.winBlurred || FX.idleSleeping || FX.userPaused))) return;
+  PH.looping = true; requestAnimationFrame(phLoop);
+}
 function phLoop(now) {
-  if (!S.stacked || document.hidden || !PH.frames.size) { PH.looping = false; return; }
+  if (!S.stacked || document.hidden || !PH.frames.size || (typeof FX !== 'undefined' && (FX.winBlurred || FX.idleSleeping || FX.userPaused))) { PH.looping = false; return; }
   PH.frames.forEach(fn => { let keep = true; try { keep = fn(now) !== false; } catch (e) { console.warn(e); keep = false; } if (!keep) PH.frames.delete(fn); });
   requestAnimationFrame(phLoop);
 }

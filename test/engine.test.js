@@ -1632,6 +1632,34 @@ test('orderblock.html skips redundant rerenders, defers non-selected OHLC arrays
   api.getFX().dirty = false;
   api.fxLoop(2100);
   assert.equal(api.getFX().running, false, 'idle fxLoop must halt cleanly when paused');
+
+  // Unpause and verify ambient flashes do not bypass 50ms throttle
+  (winListeners.get('storage') || []).forEach(fn => fn({ key: 'ob_fx_paused', newValue: '0' }));
+  assert.equal(api.getFX().userPaused, false);
+  api.getFX().ambient = true;
+  api.getFX().running = true;
+  api.getFX().dirty = false;
+  api.getFX().lastDraw = 3000;
+  api.getFX().flashes = [{ x: 100, y: 100, r: 8, rgb: '25,229,140', t0: 2990, dur: 220, a: 0.45 }];
+  api.fxLoop(3020);
+  assert.equal(api.getFX().lastDraw, 3000, 'ambient flashes must respect 50ms frame throttle instead of spinning at 60-120fps');
+
+  // Window blur and 45s inactivity sleep cleanly and add body.fx-idle
+  (winListeners.get('blur') || []).forEach(fn => fn());
+  assert.equal(api.getFX().winBlurred, true);
+  assert.equal(ctx.document.body.classList.contains('fx-idle'), true);
+  assert.equal(api.getFX().running, false);
+  (winListeners.get('focus') || []).forEach(fn => fn());
+  assert.equal(api.getFX().winBlurred, false);
+  assert.equal(ctx.document.body.classList.contains('fx-idle'), false);
+
+  api.getFX().running = true;
+  api.getFX().dirty = false;
+  api.getFX().lastInputAt = 1000;
+  api.fxLoop(50000);
+  assert.equal(api.getFX().idleSleeping, true);
+  assert.equal(api.getFX().running, false, 'fxLoop must sleep after 45s of inactivity');
+  assert.equal(ctx.document.body.classList.contains('fx-idle'), true);
 });
 
 test('modular architecture, fonts bundle, external CSS/JS bundles, and dark-mode zero-overhead Canvas2D descriptors work cleanly', () => {

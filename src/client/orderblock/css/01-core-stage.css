@@ -139,7 +139,7 @@ canvas.cv{position:absolute;display:block;pointer-events:none}
 @keyframes spin{to{transform:rotate(360deg)}}
 
 /* ---------- tiles ---------- */
-.tile{position:absolute;border-radius:6px;overflow:hidden;cursor:pointer;transition:opacity .14s, box-shadow .14s;
+.tile{position:absolute;border-radius:6px;overflow:hidden;contain:layout style paint;cursor:pointer;transition:opacity .14s, box-shadow .14s;
   background:linear-gradient(180deg,rgba(var(--sc),.07),transparent),rgba(10,15,23,.86);
   box-shadow:0 6px 14px rgba(0,0,0,.5), inset 0 0 0 1px rgba(255,255,255,.04)}
 .tile.c4{border-radius:4px}
@@ -199,7 +199,7 @@ canvas.cv{position:absolute;display:block;pointer-events:none}
 .bridge.lit{box-shadow:0 0 16px rgba(255,255,255,.5);background:linear-gradient(90deg,rgba(var(--sc),.85),rgba(var(--sc),.45))}
 
 /* ---------- tickets ---------- */
-.ticket{position:absolute;border-radius:10px;cursor:pointer;
+.ticket{position:absolute;border-radius:10px;contain:layout style;cursor:pointer;
   background:var(--tbg);/* backdrop-filter removed for crisp rendering */
   box-shadow:0 22px 44px rgba(0,0,0,.6),0 0 36px rgba(var(--sc),.22),inset 0 1px 0 rgba(255,255,255,.06);
   transition:opacity .14s}
@@ -217,6 +217,7 @@ canvas.cv{position:absolute;display:block;pointer-events:none}
 @keyframes ang{to{transform:rotate(360deg)}}
 .ticket .spec{position:absolute;inset:0;border-radius:10px;overflow:hidden;pointer-events:none}
 .ticket .spec::before{content:"";position:absolute;top:-20%;bottom:-20%;width:90px;left:-140px;background:linear-gradient(100deg,transparent,rgba(255,255,255,.07) 45%,rgba(255,255,255,.11) 50%,rgba(255,255,255,.07) 55%,transparent);transform:translateX(0) skewX(-18deg);animation:specs 9s ease-in-out infinite 4.5s}
+.ticket:not(:hover):not(.lit) .sheen::before,.ticket:not(:hover):not(.lit) .spec::before{animation-play-state:paused}
 @keyframes specs{0%{transform:translateX(0) skewX(-18deg)}14%,100%{transform:translateX(780px) skewX(-18deg)}}
 .ticket .acc{position:absolute;left:0;top:10px;bottom:10px;width:2px;background:rgb(var(--sc));box-shadow:0 0 10px rgba(var(--sc),.9),0 0 3px rgba(var(--sc),1);border-radius:1px;opacity:.75;transition:opacity .3s}
 .ticket .acc.pulse{animation:accp .9s ease-in-out}

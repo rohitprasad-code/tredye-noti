@@ -218,11 +218,12 @@ body.stacked .ob-top-bar { display: none; }
 .ob-live-dot {
   color: #19E58C;
   font-size: 10px;
+  text-shadow: 0 0 4px rgba(25, 229, 140, 0.7);
   animation: obDotGlow 1.8s infinite ease-in-out;
 }
 @keyframes obDotGlow {
-  0%, 100% { opacity: 1; filter: drop-shadow(0 0 2px #19E58C); }
-  50% { opacity: 0.45; filter: none; }
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
 }
 .ob-sync-btn {
   display: inline-flex;
@@ -1017,5 +1018,14 @@ body.fx-paused .gmote, body.fx-paused .ob-side-rail .rail-live-dot, body.fx-paus
 body.fx-paused #stack .sspine i, body.fx-paused #stack .reactor svg.phr1, body.fx-paused #stack .reactor svg.phr2,
 body.fx-paused #stack:not(.brush) .phflow:not(.phpre) .phwalls {
   animation: none !important;
+}
+body.fx-idle .clock .eng, body.fx-idle .pulse .pz, body.fx-idle .pulse .pz::after, body.fx-idle .nowglow,
+body.fx-idle .beacon .ring, body.fx-idle .reactor .halo, body.fx-idle .reactor .r1, body.fx-idle .reactor .r2,
+body.fx-idle .tile .obpulse, body.fx-idle .ticket .sheen::before, body.fx-idle .ticket .spec::before,
+body.fx-idle .chart .rl, body.fx-idle .chart .lp::after, body.fx-idle #stage.amb #cvWalls,
+body.fx-idle .gmote, body.fx-idle .ob-side-rail .rail-live-dot, body.fx-idle .ob-live-dot,
+body.fx-idle #stack .sspine i, body.fx-idle #stack .reactor svg.phr1, body.fx-idle #stack .reactor svg.phr2,
+body.fx-idle #stack:not(.brush) .phflow:not(.phpre) .phwalls {
+  animation-play-state: paused !important;
 }
 

@@ -299,7 +299,7 @@ function obPulseRenderFrame(Z, now) {
   const { ctx, P, k } = Z, T = now / 1000;
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, Z.cv.width, Z.cv.height); ctx.drawImage(Z.st, 0, 0);
   ctx.setTransform(k, 0, 0, k, 0, 0);
-  const animOn = !(FX && (FX.userPaused || S.reduced));
+  const animOn = !(FX && (FX.userPaused || FX.winBlurred || FX.idleSleeping || S.reduced));
   if (Z.f >= 1 && animOn) {
     P.dots.forEach((d, i) => {
       if (!d.s.pick) return; const q = (T / 2.6 + i * 0.37) % 1;
@@ -323,20 +323,33 @@ function obPulseRenderFrame(Z, now) {
 }
 function obPulseFrame(Z, now) {
   if (PULSE !== Z || !Z.cv.isConnected) return;
-  const paused = Z.off || document.hidden || (FX && FX.userPaused) || S.reduced;
+  const paused = Z.off || document.hidden || (FX && (FX.userPaused || FX.winBlurred || FX.idleSleeping)) || S.reduced;
   if (paused) {
     if (Z.dirty) obPulseRenderFrame(Z, now);
     Z.halt = true;
     return;
   }
+  if (!Z.stacked && typeof FX !== 'undefined' && FX.running && FX.ambient) {
+    Z.halt = true;
+    if (Z.dirty || !Z.last || now - Z.last >= 50) {
+      Z.last = now;
+      obPulseRenderFrame(Z, now);
+    }
+    return;
+  }
   requestAnimationFrame(t => obPulseFrame(Z, t));
-  if (Z.last && now - Z.last < 30 && !Z.dirty) return;
+  if (Z.last && now - Z.last < 50 && !Z.dirty) return;
   Z.last = now;
   obPulseRenderFrame(Z, now);
 }
 function obPulseWake(Z) {
   if (!Z || Z.off || PULSE !== Z) return;
-  if (Z.halt && !document.hidden && !(FX && FX.userPaused) && !S.reduced) {
+  const paused = document.hidden || (FX && (FX.userPaused || FX.winBlurred || FX.idleSleeping)) || S.reduced;
+  if (!paused && !Z.stacked && typeof FX !== 'undefined' && FX.running && FX.ambient) {
+    if (Z.dirty) obPulseRenderFrame(Z, performance.now());
+    return;
+  }
+  if (Z.halt && !paused) {
     Z.halt = false; Z.last = 0;
     requestAnimationFrame(t => obPulseFrame(Z, t));
   } else if (Z.dirty) {
@@ -810,7 +823,7 @@ function buildNodes(M, G, root) {
   mk(690, G.yT, 10, 'st fade0', 'nGate');
   mk(810, G.yS, 12, 'st fade0', 'nLens');
   const r = el('div', 'reactor fade0', root); css(r, { left: 1354, top: G.yS }); r.id = 'nReactor';
-  r.innerHTML = `<div class="halo"></div><svg width="40" height="40" viewBox="0 0 40 40"><g class="r1"><circle cx="20" cy="20" r="11" fill="none" stroke="rgba(232,241,255,.75)" stroke-width="1.2" stroke-dasharray="3 3"/></g><g class="r2"><circle cx="20" cy="20" r="17" fill="none" stroke="rgba(169,184,255,.55)" stroke-width="1" stroke-dasharray="6 4"/></g></svg><div class="core"></div>`;
+  r.innerHTML = `<div class="halo"></div><svg class="r1" width="40" height="40" viewBox="0 0 40 40"><circle cx="20" cy="20" r="11" fill="none" stroke="rgba(232,241,255,.75)" stroke-width="1.2" stroke-dasharray="3 3"/></svg><svg class="r2" width="40" height="40" viewBox="0 0 40 40"><circle cx="20" cy="20" r="17" fill="none" stroke="rgba(169,184,255,.55)" stroke-width="1" stroke-dasharray="6 4"/></svg><div class="core"></div>`;
   buildStationCounts(M, G, root);
   buildGateMotes(M, G, root);
 }
@@ -836,7 +849,7 @@ function buildGateMotes(M, G, root) {
   const P = G.P, wins = [[G.T0, G.T0 + obWinN(1) * P, 1], [G.T1 - obWinN(-1) * P, G.T1, -1]];
   wins.filter(([y0, y1, side]) => obWinN(side) > 0 && y1 > y0).forEach(([y0, y1, side]) => {
     const w = el('div', 'gwin', root); css(w, { left: 593, top: y0, width: 96, height: y1 - y0 });
-    const r = rng('gate', String(side)); const n = 9;
+    const r = rng('gate', String(side)); const n = 5;
     for (let i = 0; i < n; i++) {
       const m = el('i', 'gmote', w);
       const x = 6 + r() * 66, y = 3 + r() * (y1 - y0 - 6), d = 8 + r() * 7;

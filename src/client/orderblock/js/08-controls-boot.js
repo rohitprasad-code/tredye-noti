@@ -348,7 +348,9 @@ function obControlsMount() {
   const mktStateEl = document.getElementById("obMarketState");
   const mktCountEl = document.getElementById("obMarketCount");
   if (clockEl || mktWrap) {
+    let lastMktShort = "";
     const updateStatusAndClk = () => {
+      if (document.hidden) return;
       const now = new Date();
       if (clockEl) {
         const hrs = String(now.getHours()).padStart(2, '0');
@@ -356,16 +358,20 @@ function obControlsMount() {
         const sec = String(now.getSeconds()).padStart(2, '0');
         const st = (window.OBF_FEED && window.OBF_FEED.status) || {};
         const prefix = st.tokenExpired ? "TOKEN EXPIRED" : (st.state || "LIVE");
-        clockEl.textContent = `${prefix} ${hrs}:${min}:${sec}`;
+        const nextClk = `${prefix} ${hrs}:${min}:${sec}`;
+        if (clockEl.textContent !== nextClk) clockEl.textContent = nextClk;
       }
       if (mktWrap && window.NSEMarketHours && typeof window.NSEMarketHours.getMarketStatus === "function") {
         const ms = window.NSEMarketHours.getMarketStatus(now);
-        mktWrap.classList.toggle("is-open", Boolean(ms.open));
-        mktWrap.classList.toggle("is-closed", !ms.open);
-        if (mktStateEl) mktStateEl.textContent = ms.statusLabel;
-        if (mktCountEl) mktCountEl.textContent = `${ms.countdownAction} ${ms.countdownText}`;
-        mktWrap.setAttribute("title", ms.detailText);
-        mktWrap.setAttribute("aria-label", ms.detailText);
+        if (ms.shortText !== lastMktShort) {
+          lastMktShort = ms.shortText;
+          mktWrap.classList.toggle("is-open", Boolean(ms.open));
+          mktWrap.classList.toggle("is-closed", !ms.open);
+          if (mktStateEl) mktStateEl.textContent = ms.statusLabel;
+          if (mktCountEl) mktCountEl.textContent = `${ms.countdownAction} ${ms.countdownText}`;
+          mktWrap.setAttribute("title", ms.detailText);
+          mktWrap.setAttribute("aria-label", ms.detailText);
+        }
       }
     };
     if (window.OBF_FEED) {
@@ -373,6 +379,9 @@ function obControlsMount() {
     }
     updateStatusAndClk();
     setInterval(updateStatusAndClk, 1000);
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) updateStatusAndClk();
+    });
   }
 }
 
