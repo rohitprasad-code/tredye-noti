@@ -50,6 +50,8 @@ body.stacked .ob-top-bar { display: none; }
   position: relative;
   display: flex;
   align-items: center;
+  /* reserve #obFind's width before the script mounts it (no layout shift) */
+  min-width: clamp(142px, 12.2vw, 240px);
 }
 #obFindHost #obFind {
   position: relative !important;
@@ -132,6 +134,10 @@ body.stacked .ob-top-bar { display: none; }
   border-radius: 4px;
   background: rgba(255, 255, 255, 0.07);
   color: inherit;
+  /* fixed 3-digit box: "0" placeholders become real counts without moving the bar */
+  display: inline-block;
+  min-width: 3ch;
+  text-align: center;
 }
 .obc-group {
   display: inline-flex;
@@ -158,7 +164,8 @@ body.stacked .ob-top-bar { display: none; }
   color: #EEF3FA;
   font: 600 11px/26px "Inter Tight", sans-serif;
   height: 26px;
-  max-width: clamp(82px, 8.2vw, 150px);
+  /* fixed width (was max-width): the sector list filled in after boot no longer widens the select */
+  width: clamp(82px, 8.2vw, 150px);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -199,6 +206,16 @@ body.stacked .ob-top-bar { display: none; }
 }
 .ob-market-pill .ob-mkt-sep {
   opacity: 0.65;
+}
+/* room for the countdown ("opens 15h 17m") before the first tick replaces "opens —" */
+.ob-market-pill .ob-mkt-count {
+  display: inline-block;
+  min-width: 7.1em;
+}
+/* room for "WS LIVE 00:00:00" before the first tick replaces "LIVE" */
+.ob-live-txt {
+  display: inline-block;
+  min-width: 10.5em;
 }
 .ob-live-status {
   display: inline-flex;

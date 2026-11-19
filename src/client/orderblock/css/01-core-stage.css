@@ -25,7 +25,9 @@ body.stacked{overflow-x:hidden;overflow-y:auto;height:auto;min-height:100%}
 /* #grain removed for GPU performance */
 
 /* ---------- stage ---------- */
-#stage{position:absolute;left:0;top:0;width:1920px;height:1080px;transform-origin:0 0;overflow:hidden;contain:layout paint;will-change:transform}
+/* default to the rail/top-bar offsets computeScale() sets, so the pre-boot paint is already in place (no layout shift) */
+#stage{position:absolute;left:54px;top:36px;width:1920px;height:1080px;transform-origin:0 0;overflow:hidden;contain:layout paint;will-change:transform}
+body.rail-expanded #stage{left:190px}
 body.stacked #stage{display:none}
 #stage .L{position:absolute;inset:0;pointer-events:none}
 #lyBase{background:var(--bg)}
