@@ -1029,3 +1029,70 @@ body.fx-idle #stack:not(.brush) .phflow:not(.phpre) .phwalls {
   animation-play-state: paused !important;
 }
 
+
+/* ---------- side pills: one highlight that slides between All / Bullish / Bearish ---------- */
+.obc-pills { position: relative; }
+.obc-ind {
+  position: absolute; left: 0; top: 2px; width: 0; height: 22px; border-radius: 5px;
+  pointer-events: none; z-index: 0;
+  background: rgba(232, 241, 255, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(232, 241, 255, 0.3);
+  transition: transform .34s cubic-bezier(.22, 1, .36, 1), width .34s cubic-bezier(.22, 1, .36, 1),
+              background-color .34s ease, box-shadow .34s ease;
+}
+.obc-ind.no-anim { transition: none; }
+.obc-ind[data-side="BULL"] {
+  background: rgba(25, 229, 140, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(25, 229, 140, 0.45), 0 0 8px rgba(25, 229, 140, 0.2);
+}
+.obc-ind[data-side="BEAR"] {
+  background: rgba(255, 59, 92, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(255, 59, 92, 0.45), 0 0 8px rgba(255, 59, 92, 0.2);
+}
+:root[data-theme=light] .obc-ind {
+  background: #FFFFFF;
+  box-shadow: inset 0 0 0 1px #94A3B8, 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+:root[data-theme=light] .obc-ind[data-side="BULL"] {
+  background: rgba(14, 159, 99, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(14, 159, 99, 0.45);
+}
+:root[data-theme=light] .obc-ind[data-side="BEAR"] {
+  background: rgba(226, 61, 79, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(226, 61, 79, 0.45);
+}
+.obc-pills.has-ind .obc-pill { position: relative; z-index: 1; transition: color .3s ease, background-color .18s ease; }
+.obc-pills.has-ind .obc-pill.on { background: transparent !important; box-shadow: none !important; }
+
+/* ---------- stage slide while the side filter swaps ----------
+   --swap-dir is +1 moving right (All → Bullish → Bearish): top to bottom; -1 moving left: bottom to top.
+   Cards stretch tall along the travel while they move and settle back to their own height on landing.
+   `translate` / `scale` (not transform) on the absolutely placed children keep their layout untouched. */
+body.ob-swap-out #tickets > *, body.ob-swap-in #tickets > *, body.ob-swap-run #tickets > *,
+body.ob-swap-out #ladderWrap > *, body.ob-swap-in #ladderWrap > *, body.ob-swap-run #ladderWrap > *,
+body.ob-swap-out #plumeWrap > *, body.ob-swap-in #plumeWrap > *, body.ob-swap-run #plumeWrap > * {
+  will-change: translate, scale, opacity;
+}
+/* out: leave along the travel, stretching from the trailing edge */
+body.ob-swap-out #tickets > *, body.ob-swap-out #ladderWrap > *, body.ob-swap-out #plumeWrap > * {
+  translate: 0 calc(var(--swap-dir, 1) * 70px); opacity: 0;
+  transition: translate .26s cubic-bezier(.5, 0, .75, 0), opacity .2s ease-in .06s, scale .26s cubic-bezier(.5, 0, .75, 0);
+}
+body.ob-swap-out #tickets > .ticket { scale: 1 1.22; transform-origin: 50% var(--swap-from, 0%); }
+/* in, parked: off on the entering side, already stretched */
+body.ob-swap-in #tickets > *, body.ob-swap-in #ladderWrap > *, body.ob-swap-in #plumeWrap > * {
+  translate: 0 calc(var(--swap-dir, 1) * -70px); opacity: 0; transition: none;
+}
+body.ob-swap-in #tickets > .ticket { scale: 1 1.22; transform-origin: 50% var(--swap-to, 100%); }
+/* in, running: travel lands first, the stretch relaxes a beat later */
+body.ob-swap-run #tickets > *, body.ob-swap-run #ladderWrap > *, body.ob-swap-run #plumeWrap > * {
+  transition: translate .46s cubic-bezier(.16, 1, .3, 1) calc(var(--sd, 0) * 1ms),
+              opacity .24s ease-out calc(var(--sd, 0) * 1ms),
+              scale .62s cubic-bezier(.34, 1.36, .5, 1) calc(var(--sd, 0) * 1ms);
+}
+body.ob-swap-run #tickets > .ticket { transform-origin: 50% var(--swap-to, 100%); }
+@media (prefers-reduced-motion: reduce) {
+  .obc-ind { transition: none; }
+  body.ob-swap-out #tickets > *, body.ob-swap-out #ladderWrap > *, body.ob-swap-out #plumeWrap > *,
+  body.ob-swap-in #tickets > *, body.ob-swap-in #ladderWrap > *, body.ob-swap-in #plumeWrap > * { translate: none; scale: none; }
+}

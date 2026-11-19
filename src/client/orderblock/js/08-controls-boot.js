@@ -300,16 +300,79 @@ function obControlsMount() {
       OBF_FEED.load({ sort: sortSel.value });
     });
   }
+  /* one highlight slides between the pills; the stage fades out, swaps once the new snapshot has
+     rendered, then fades back in — so All / Bullish / Bearish never snaps */
+  const pillBox = pills.length ? pills[0].parentElement : null;
+  let ind = null;
+  const placeInd = (animate) => {
+    const on = pills.find(p => p.classList.contains("on")) || pills[0];
+    if (!ind || !on) return;
+    ind.classList.toggle("no-anim", !animate);
+    ind.dataset.side = on.dataset.side;
+    ind.style.width = on.offsetWidth + "px";
+    ind.style.height = on.offsetHeight + "px";
+    ind.style.top = on.offsetTop + "px";
+    ind.style.transform = `translateX(${on.offsetLeft}px)`;
+    if (!animate) { void ind.offsetWidth; ind.classList.remove("no-anim"); }
+  };
+  if (pillBox) {
+    ind = document.createElement("span");
+    ind.className = "obc-ind";
+    ind.setAttribute("aria-hidden", "true");
+    pillBox.prepend(ind);
+    pillBox.classList.add("has-ind");
+    placeInd(false);
+    if (window.ResizeObserver) new ResizeObserver(() => placeInd(false)).observe(pillBox);
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => placeInd(false));
+  }
+  let swapTok = 0;
+  const OUT_MS = 260, RUN_MS = 760;
+  const wait = ms => new Promise(r => setTimeout(r, ms));
   pills.forEach(btn => {
     btn.addEventListener("click", () => {
       const nextSide = btn.dataset.side;
       const prevSide = (OBF_FEED.filter && OBF_FEED.filter.side) || "ALL";
       if (nextSide === prevSide) return;
-      pills.forEach(p => p.classList.toggle("on", p === btn));
-      if (window.gsap) {
-        gsap.fromTo("#tickets, #ladderWrap, #plumeWrap", { opacity: 0.52 }, { opacity: 1, duration: 0.24, ease: "power2.out", overwrite: "auto" });
-      }
-      OBF_FEED.load({ side: nextSide });
+      pills.forEach(p => { p.classList.toggle("on", p === btn); p.setAttribute("aria-pressed", String(p === btn)); });
+      placeInd(true);
+      const tok = ++swapTok;
+      const B = document.body;
+      const order = ["ALL", "BULL", "BEAR"];
+      const dir = order.indexOf(nextSide) >= order.indexOf(prevSide) ? 1 : -1;
+      B.style.setProperty("--swap-dir", dir);
+      B.style.setProperty("--swap-from", dir > 0 ? "0%" : "100%");  // leaving: trailing edge holds, the rest stretches ahead
+      B.style.setProperty("--swap-to", dir > 0 ? "100%" : "0%");    // entering: leading edge lands, the tail catches up
+      B.classList.remove("ob-swap-in", "ob-swap-run");
+      B.classList.add("ob-swap-out");
+      if (OBF_FEED.filter) OBF_FEED.filter.side = nextSide;
+      // fetch while the old view leaves, but hold the rerender until it is gone, so there is no empty pause
+      const hold = OB_SWAP_HOLD = { d: null };
+      Promise.all([OBF_FEED.load({ side: nextSide }), wait(OUT_MS)])
+        .then(() => wait(FX.show ? 320 : 0))            // onUpdate defers ~300ms while an FX show plays
+        .then(() => {
+          if (tok !== swapTok) return;                  // a newer click owns the slide
+          OB_SWAP_HOLD = null;
+          if (hold.d) OBF_FEED.onUpdate(hold.d);
+          const tks = [...document.querySelectorAll("#tickets > .ticket")];
+          const H = (document.getElementById("stage") || {}).offsetHeight || 1080;
+          tks.forEach(t => {                            // top-down cascade (bottom-up when going back)
+            const f = Math.min(1, Math.max(0, t.offsetTop / H));
+            t.style.setProperty("--sd", Math.round((dir > 0 ? f : 1 - f) * 90));
+          });
+          B.classList.add("ob-swap-in");                // park the new view on the entering side, stretched
+          B.classList.remove("ob-swap-out");
+          void B.offsetWidth;                           // commit the parked pose before releasing it
+          setTimeout(() => {                            // not rAF: it never fires in a background tab
+            if (tok !== swapTok) return;
+            B.classList.add("ob-swap-run");
+            B.classList.remove("ob-swap-in");
+            wait(RUN_MS).then(() => {
+              if (tok !== swapTok) return;
+              B.classList.remove("ob-swap-run");
+              tks.forEach(t => t.style.removeProperty("--sd"));
+            });
+          }, 16);
+        });
     });
   });
   if (syncBtn) {
@@ -542,7 +605,9 @@ function rerender(resize) {
     }
   } catch (e) { console.warn('rerender failed', e); }
 }
-OBF_FEED.onUpdate = function (d) { if (FX.show) { setTimeout(() => { if (OBF_FEED.data === d) OBF_FEED.onUpdate(d); }, 300); return; }
+var OB_SWAP_HOLD = null;   // set by the side pills while the old view slides out
+OBF_FEED.onUpdate = function (d) { if (OB_SWAP_HOLD) { OB_SWAP_HOLD.d = d; return; }
+  if (FX.show) { setTimeout(() => { if (OBF_FEED.data === d) OBF_FEED.onUpdate(d); }, 300); return; }
   const sig = obSnapDigest(d);
   if (M && !OB_PEEK && sig && M._sig === sig) {
     M.D = d;
