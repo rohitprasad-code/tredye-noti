@@ -54,6 +54,41 @@ test('fix1: AggressorTracker classifies traded volume by prevailing quote, then 
   assert.equal(u.get('Y').samples, 0);
 });
 
+test('AggressorTracker.profile: buy/sell volume by price, binned over the traded range', () => {
+  const t = new AggressorTracker({ minSamples: 1 });
+  const ts = Date.parse('2026-11-19T10:00:00+05:30');
+  const now = ts + 60000;
+  assert.equal(t.profile('X', { now }), null);                         // nothing tracked
+  t.update('X', { ltp: 100, vtt: 1000, bid: 99.95, ask: 100.05, ts });    // seed only
+  assert.equal(t.profile('X', { now }), null);                         // nothing classified yet
+
+  t.update('X', { ltp: 100.05, vtt: 1300, bid: 100.0, ask: 100.1, ts: ts + 1000 }); // BUY 300 @ 100.05
+  t.update('X', { ltp: 100.0, vtt: 1400, bid: 99.95, ask: 100.05, ts: ts + 2000 }); // SELL 100 @ 100.00
+  t.update('X', { ltp: 102.0, vtt: 1450, bid: 101.9, ask: 102.0, ts: ts + 3000 });  // BUY 50 @ 102.00
+  const p = t.profile('X', { bins: 4, now });
+  assert.equal(p.lo, 100);
+  assert.equal(p.hi, 102);
+  assert.equal(p.b.length, 4);
+  assert.deepEqual(p.b, [300, 0, 0, 50]);                 // 100.05 in bin 0, the top price in the last bin
+  assert.deepEqual(p.s, [100, 0, 0, 0]);
+  assert.equal(p.b.reduce((a, x) => a + x, 0), t.get('X').buyVol);
+  assert.equal(p.s.reduce((a, x) => a + x, 0), t.get('X').sellVol);
+  assert.equal(p.since, ts + 1000);                       // first classified update, not the seed
+
+  // a single traded price → one bin, lo === hi
+  const u = new AggressorTracker();
+  u.update('Y', { ltp: 50, vtt: 10, ts });
+  u.update('Y', { ltp: 50, vtt: 30, bid: 49.95, ask: 50, ts });
+  u.update('Y', { ltp: 50, vtt: 40, bid: 49.95, ask: 50, ts });
+  const q = u.profile('Y', { now });
+  assert.equal(q.lo, 50);
+  assert.equal(q.hi, 50);
+  assert.equal(q.b.length, 1);
+
+  // yesterday's levels never show today
+  assert.equal(t.profile('X', { now: ts + 86400000 }), null);
+});
+
 test('fix1: Upstox book ratio never overwrites buy_pct; reliable aggressor % does', () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'tredye-fix1-'));
   const svc = new TredyeFlowService({ demo: true, dryRun: true, dbPath: path.join(tmp, 'f.db') });

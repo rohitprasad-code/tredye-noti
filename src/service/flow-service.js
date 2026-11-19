@@ -273,6 +273,10 @@ class TredyeFlowService {
         });
         if (realX) {
           item.x = realX;
+          // aggressor (trade-side) volume by price for the tile's buy/sell split; absent until
+          // the live feed has classified volume for this symbol today
+          const ag = this.upstox?.aggressor?.profile?.(c.symbol, { bins: 48 });
+          if (ag) item.x.a = ag;
         }
       }
 

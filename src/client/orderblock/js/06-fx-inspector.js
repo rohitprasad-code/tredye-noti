@@ -138,7 +138,9 @@ function shimmerStep(now) {
   const weighted = FX.weightedTiles;
   if (!weighted || !weighted.length) return;
   for (let i = 0; i < 2; i++) {
-    const t = weighted[Math.floor(Math.random() * weighted.length)]; const k = Math.floor(Math.random() * t.rd.rows);
+    const t = weighted[Math.floor(Math.random() * weighted.length)];
+    if (!t.rd || t.rd.real) continue;            // real volume rows never shimmer: the bar length is data
+    const k = Math.floor(Math.random() * t.rd.rows);
     t.mul0[k] = t.mul[k]; t.mulT[k] = 0.9 + Math.random() * 0.2; t.tw[k] = now;
   }
 }

@@ -25,6 +25,7 @@ A free, open-source ([MIT](LICENSE)) local alternative to [order-block.com/app/o
 
 - **Try Immediately Offline (`npm run demo`):** Built-in NSE sample dataset (`data/sample-fixture.js`) so anyone can explore the terminal without Upstox or Tredye credentials.
 - **5-Stage Order-Flow Funnel (`/app/orderblock`):** Ranks 218 NSE F&O stocks across 5 confluence signals (`VWAP`, `POC`, `Buy%`, `CVD`, `Book Imbalance`), sector filters, side filters (`All`, `Bullish`, `Bearish`), and 3 ranking modes.
+- **Volume-at-Price Tiles:** Each top-20 contender's tile is a real volume profile built from its 5-minute Upstox candles (POC, 70% value area, VWAP, Order Block zone), with an aggressive **buy / sell split** per price from the live WebSocket feed. See [Reading the Order Block Tiles](#reading-the-order-block-tiles).
 - **Automated Order Block Detection:** Identifies unmitigated Bullish/Bearish Order Blocks on intraday candles with invalidation and proximity scoring (`IN_ZONE`, `RETESTED_HELD`, `UNTESTED`).
 - **Live Upstox Integration:** Supports both **1-Year Analytics Tokens** and **Daily OAuth Login**, plus WebSocket V3 real-time ticks and 5-level market depth.
 - **Local SQLite Persistence:** Stores alerts and terminal rule settings locally via Node's built-in `node:sqlite` (`data/tredye-alerts.db`).
@@ -60,7 +61,7 @@ Then open **http://localhost:4600** in your browser.
 | `npm start` | Start the live service & dashboard (`node --env-file-if-exists=.env src/index.js`) |
 | `npm run dev` | Same as `npm start` for local development |
 | `npm run dry-run` | Print a single CLI summary of top setups & alerts and exit (`--dry-run`) |
-| `npm test` | Run the test suite (`test/engine.test.js` + `test/fixes.test.js`, 39 tests) |
+| `npm test` | Run the test suite (`test/engine.test.js` + `test/fixes.test.js`, 40 tests) |
 | `npm run next:dev` | Run the standalone Next.js App Router UI shell (`src/app/`) on port `3000` |
 | `npm run build` | Build the Next.js App Router frontend (`next build`) |
 
@@ -129,6 +130,32 @@ For full formulas and examples, see [docs/ORDER_FLOW_RANKING.md](docs/ORDER_FLOW
 5. **Order Block Detection (`src/engine/orderblocks.js`):**
    - **Bullish OB (Buy Zone):** Last down candle (`close < open`) before a 1–3 candle impulse (`>= 1.8×` average candle range) breaking the prior 7-candle high.
    - **Bearish OB (Sell Zone):** Last up candle (`close > open`) before a 1–3 candle impulse (`>= 1.8×` average candle range) breaking the prior 7-candle low.
+
+---
+
+## Reading the Order Block Tiles
+
+Each tile in the funnel (top 20 contenders per side) is a **volume-at-price ladder**: one horizontal bar per price level, highest price at the top. Nothing in it is simulated.
+
+| Element | Meaning |
+| :--- | :--- |
+| **Bar length** | Volume traded at that price today, from the stock's real 5-minute candles (each candle's volume spread evenly across its high–low range). Measured against the stock's own average level, so the scale is the **same on every tile**: full width = 4× an average level. |
+| **🟩 Green** | **Aggressive buy** volume — trades that lifted the offer (paid the ask). |
+| **🟥 Red** | **Aggressive sell** volume — trades that hit the bid. |
+| **⬜ Grey** | Volume whose side is **unknown**: it traded before the live feed started, or it could not be classified. |
+| **White bar + `POC`** | Point of Control — the day's busiest price. |
+| **Brighter bars + left-edge bracket** | Value area — the band holding 70% of the day's volume. |
+| **End tick on a bar** | That level is above 4× average and is capped at full width. |
+| **Empty rows** | Prices the stock did not trade today. |
+| **Green / red box** | The Order Block zone. **Blue dotted line** = VWAP. **White chip** = LTP. |
+| **`NO VOLUME DATA`** | No candles were available for that stock. |
+
+**How to read it:** at a bullish Order Block, mostly **green** rows mean buyers defended the zone; mostly **red** means sellers were hitting it; mostly **grey** means there is not enough classified volume to judge. Hover a tile to see when the split started and what share of the day's volume is classified.
+
+**Buy / sell split limits** (`src/engine/aggressor.js`):
+- It needs the live Upstox WebSocket feed and covers only the time **since the feed connected** — start at 11:00 and 09:15–11:00 stays grey.
+- It is held in memory, so **restarting the server mid-session clears it**.
+- The feed is a snapshot stream, not every print: volume between two snapshots is booked to one side at the snapshot's LTP. It is a sound estimate of who was aggressive, not an exchange-grade footprint.
 
 ---
 

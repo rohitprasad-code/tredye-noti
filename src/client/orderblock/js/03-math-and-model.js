@@ -310,10 +310,71 @@ function obPlaceMids(s, g, opt) {
 function obRealTape(s) {
   const x = s.x; s.dayH = x.hl[0]; s.dayL = x.hl[1]; s.vwapEnd = x.vw;
   if (x.k) x.k = obTape(x.k);
+  s.vp = x.k ? obVolProfile(x.k) : null;
+  s.ag = obAggrProfile(x.a);
   if (!x.k || !x.k.w.length) return;
   const w = x.k.w, n = Math.min(w.length, C5N), off = C5N - n, v = new Float64Array(NT + 1);
   for (let t = 0; t <= NT; t++) { const p = t / 5 - off; if (p <= 1) v[t] = w[0]; else if (p >= n) v[t] = w[n - 1]; else { const i = Math.ceil(p) - 1; v[t] = w[i - 1] + (w[i] - w[i - 1]) * (p - i); } }
   v[NT] = x.vw; s.vwap = v;
+}
+/* ---- real volume-at-price from the pick's 5-minute candles ----
+   Each candle's traded volume is spread evenly across its high–low range (the standard approximation when only
+   OHLCV is known). Nothing here is seeded or random. POC = the busiest price; the value area is the 70 % of the
+   day's volume grown outward from the POC (standard market-profile rule), on VP_BINS fixed bins over the day range. */
+const VP_BINS = 24;
+function obVolProfile(k) {
+  const H = k.h || [], L = k.l || [], V = k.v || [], n = Math.min(H.length, L.length, V.length);
+  const cs = []; let lo = Infinity, hi = -Infinity, tot = 0;
+  for (let i = 0; i < n; i++) {
+    const h = +H[i], l = +L[i], v = +V[i];
+    if (!(h >= l) || !Number.isFinite(h) || !Number.isFinite(l) || !(v > 0)) continue;
+    cs.push([l, h, v]); lo = Math.min(lo, l); hi = Math.max(hi, h); tot += v;
+  }
+  if (!cs.length || !(tot > 0) || !(hi > lo)) return null;
+  const vp = { cs, lo, hi, tot, n: cs.length };
+  const bw = (hi - lo) / VP_BINS, bins = new Float64Array(VP_BINS);
+  for (let j = 0; j < VP_BINS; j++) bins[j] = obVolIn(vp, lo + j * bw, lo + (j + 1) * bw);
+  let poc = 0; for (let j = 1; j < VP_BINS; j++) if (bins[j] > bins[poc]) poc = j;
+  let a = poc, b = poc, acc = bins[poc];
+  while (acc < 0.7 * tot && (a > 0 || b < VP_BINS - 1)) {
+    const dn = a > 0 ? bins[a - 1] : -1, up = b < VP_BINS - 1 ? bins[b + 1] : -1;
+    if (up >= dn) acc += bins[++b]; else acc += bins[--a];
+  }
+  vp.poc = lo + (poc + 0.5) * bw; vp.pocLo = lo + poc * bw; vp.pocHi = vp.pocLo + bw;
+  vp.val = lo + a * bw; vp.vah = lo + (b + 1) * bw;
+  return vp;
+}
+// volume traded inside the price band [a, b] (a < b)
+function obVolIn(vp, a, b) {
+  let v = 0;
+  for (const [l, h, q] of vp.cs) {
+    if (h <= a || l > b) continue;
+    if (h === l) { v += q; continue; }                      // a flat candle: all of it at its one price
+    const ov = Math.min(b, h) - Math.max(a, l); if (ov > 0) v += q * ov / (h - l);
+  }
+  return v;
+}
+/* ---- trade-side (aggressor) volume by price from the live feed (server: AggressorTracker.profile) ----
+   b / s / u = buy / sell / unclassified volume in equal bins over [lo, hi]. Only covers the time since the feed
+   started classifying (`since`), so it is drawn as a share of each row's candle volume, never on its own scale. */
+function obAggrProfile(a) {
+  if (!a || !Array.isArray(a.b) || !Array.isArray(a.s) || !a.b.length) return null;
+  const n = a.b.length, lo = +a.lo, hi = +a.hi;
+  if (!Number.isFinite(lo) || !Number.isFinite(hi) || hi < lo) return null;
+  return { lo, hi, n, step: n > 1 || hi > lo ? (hi - lo) / n : 0, b: a.b.map(Number), s: a.s.map(Number),
+    since: a.since || null, cov: +a.coveragePct || 0 };
+}
+// buy / sell volume the feed classified inside the price band [pa, pb)
+function obAggrIn(ag, pa, pb) {
+  let b = 0, s = 0;
+  if (!ag.step) { if (ag.lo >= pa && ag.lo < pb) { b = ag.b[0]; s = ag.s[0]; } return { b, s }; }
+  const i0 = Math.max(0, Math.floor((pa - ag.lo) / ag.step)), i1 = Math.min(ag.n - 1, Math.floor((pb - ag.lo) / ag.step));
+  for (let i = i0; i <= i1; i++) {
+    const a0 = ag.lo + i * ag.step, a1 = a0 + ag.step, ov = Math.min(pb, a1) - Math.max(pa, a0);
+    if (ov <= 0) continue;
+    const f = ov / ag.step; b += ag.b[i] * f; s += ag.s[i] * f;
+  }
+  return { b, s };
 }
 // a pick's sparkline from its real candles (open → each close, over the session so far)
 function obRealPath(s) {

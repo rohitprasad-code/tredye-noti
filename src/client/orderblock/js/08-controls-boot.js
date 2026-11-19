@@ -549,10 +549,16 @@ function obSnapDigest(d) {
   for (let i = 0; i < d.stocks.length; i++) {
     const s = d.stocks[i], x = s.x;
     parts.push(
-      `${s.s}:${s.l}:${s.c}:${s.top ? 1 : 0}:${s.g}:${s.bu || ''}:${s.setupScore || 0}:${s.strengthScore || 0}:${x && x.ob ? x.ob.join(',') : ''}:${x && x.k && x.k.c ? x.k.c.length : 0}`
+      `${s.s}:${s.l}:${s.c}:${s.top ? 1 : 0}:${s.g}:${s.bu || ''}:${s.setupScore || 0}:${s.strengthScore || 0}:${x && x.ob ? x.ob.join(',') : ''}:${x && x.k && x.k.c ? x.k.c.length : 0}:${obAggrSig(x && x.a)}`
     );
   }
   return parts.join('|');
+}
+// the buy/sell split changes on every live tick without the price or candles changing: fold its totals in
+function obAggrSig(a) {
+  if (!a || !Array.isArray(a.b)) return '';
+  let b = 0, s = 0; for (let i = 0; i < a.b.length; i++) { b += +a.b[i] || 0; s += +(a.s && a.s[i]) || 0; }
+  return `${a.lo},${a.hi},${b},${s}`;
 }
 function boot() {
   if (OB_PEEK) { obPeekBoot(); return; }

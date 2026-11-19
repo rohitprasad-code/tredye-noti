@@ -26,9 +26,49 @@ function tileWindow(s, rows, pitch, headPx) {
   const hi = (bLo + bHi) / 2 + cRow * ppr;
   return { hi, lo: hi - rows * ppr, ppr };
 }
+/* Real volume-at-price ladder (every non-event tile). Bar length = volume density: the share of the day's volume
+   traded in the row divided by the row's share of the day's range, so 1 = an average level and the scale is the
+   same on every tile (a long bar on one stock means the same as on another). Rows outside the day's range traded
+   nothing and stay empty. Without candles the tile says so instead of drawing anything. */
+const VP_DMAX = 4;          // density drawn at full width (≈ p99 of live rows; bars past it are capped and marked)
+function tileRowsReal(s, w, h, headPx, rows, pitch, bar, off) {
+  const win = tileWindow(s, rows, pitch, headPx);
+  const hi = win.hi, lo = win.lo, rg = (hi - lo) || 1;
+  const rowOf = p => clamp(Math.floor((hi - p) / rg * rows), 0, rows - 1);
+  const ltpRow = rowOf(s.l);
+  let obR0 = -1, obR1 = -1;
+  if (s.L) { obR0 = rowOf(s.L.obHi); obR1 = rowOf(s.L.obLo); }
+  const vp = s.vp, R = [];
+  const full = w - 2 - 4;
+  for (let k = 0; k < rows; k++) {
+    const pB = hi - k / rows * rg, pA = hi - (k + 1) / rows * rg, mid = (pA + pB) / 2;
+    let dens = 0, vRow = 0;
+    if (vp) { vRow = obVolIn(vp, pA, pB); dens = (vRow / vp.tot) / ((pB - pA) / (vp.hi - vp.lo)); }
+    const len = full * clamp(dens / VP_DMAX, 0, 1);
+    // buy / sell split: the share of this row's candle volume the live feed classified, split by side.
+    // The rest of the bar (volume before the feed started, or unclassified) stays neutral.
+    let gLen = 0, rLen = 0;
+    if (s.ag && vRow > 0 && len > 0) {
+      const a = obAggrIn(s.ag, pA, pB), known = a.b + a.s;
+      if (known > 0) { const cov = Math.min(1, known / vRow); gLen = len * cov * a.b / known; rLen = len * cov * a.s / known; }
+    }
+    R.push({
+      dens, len, gLen, rLen, cap: dens > VP_DMAX,
+      inVA: !!vp && mid >= vp.val && mid <= vp.vah,
+      inOB: obR0 >= 0 && k >= obR0 && k <= obR1,
+      y: off + k * pitch
+    });
+  }
+  // POC: the row holding the day's POC price (if the window shows it)
+  const pocRow = vp && vp.poc <= hi && vp.poc >= lo ? rowOf(vp.poc) : -1;
+  if (pocRow >= 0) R[pocRow].poc = true;
+  const vwRow = s.vwapEnd && s.vwapEnd <= hi && s.vwapEnd >= lo ? rowOf(s.vwapEnd) : -1;
+  return { real: true, noData: !vp, rows, pitch, bar, ltpRow, R, obR0, obR1, rowOf, hi, lo, vwRow, pocRow };
+}
 function tileRows(s, w, h, headPx = 0, key = 'c3') {
   const pitch = h >= 30 ? 5 : 3, bar = h >= 30 ? 3 : 2; const rows = Math.max(3, Math.floor((h - 2) / pitch));
   const off = Math.floor((h - rows * pitch) / 2) + (pitch - bar) / 2;
+  if (!s.event) return tileRowsReal(s, w, h, headPx, rows, pitch, bar, off);
   const win = tileWindow(s, rows, pitch, headPx);
   const hi = win.hi, lo = win.lo, rg = (hi - lo) || 1;
   const rowOf = p => clamp(Math.floor((hi - p) / rg * rows), 0, rows - 1);
@@ -95,6 +135,59 @@ function tileRows(s, w, h, headPx = 0, key = 'c3') {
   const vwRow = s.vwapEnd && s.vwapEnd <= hi && s.vwapEnd >= lo ? rowOf(s.vwapEnd) : -1;
   return { rows, pitch, bar, ltpRow, R, obR0, obR1, bias, rowOf, hi, lo, vwRow };
 }
+/* real volume-at-price rows: the candle volume is drawn neutral (candles carry no side); where the live feed
+   classified trades, that share of the bar is split green (aggressive buys) / red (aggressive sells).
+   Value area brighter, POC brightest and labelled, capped rows get an end tick. */
+const VOLC = '160,176,204', POCC = '236,242,250';
+function drawVolRows(T, D, ms, grow, fast) {
+  const { ctx } = T, w = T.w, h = T.h;
+  if (D.noData) {
+    if (ms > 120) {
+      const fs = S.stacked ? 10 : Math.max(8.5 * (S.tx || 1), 8.5 / (S.s || 1));
+      const y0 = T.plateBox ? T.plateBox.b : 0, cy = Math.round(y0 + (h - y0) / 2);
+      ctx.font = `600 ${fs}px ${FONT_UI}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = 'rgba(160,176,204,.5)'; ctx.fillText('NO VOLUME DATA', w / 2, cy);
+      ctx.textAlign = 'left';
+    }
+    return;
+  }
+  let va0 = -1, va1 = -1;
+  for (let k = 0; k < D.rows; k++) {
+    const r = D.R[k], f = grow(k); if (f <= 0) continue;
+    ctx.fillStyle = 'rgba(255,255,255,.025)'; ctx.fillRect(1, r.y, w - 2, D.bar);      // empty track: zero volume
+    if (r.inVA) { if (va0 < 0) va0 = k; va1 = k; }
+    if (r.len <= 0) continue;
+    const len = Math.max(1, r.len * f);
+    ctx.fillStyle = r.poc ? `rgba(${POCC},.95)` : `rgba(${VOLC},${r.inVA ? .62 : .3})`;
+    ctx.fillRect(1, r.y, len, D.bar);
+    // aggressor split over the neutral bar: buys (green) from the left, then sells (red); the neutral rest is
+    // volume whose side is unknown
+    if (r.gLen + r.rLen > 0) {
+      const a = r.poc || r.inVA ? .92 : .55, g = r.gLen * f, rd = r.rLen * f;
+      if (g > 0) { ctx.fillStyle = `rgba(${SC[1]},${a})`; ctx.fillRect(1, r.y, g, D.bar); }
+      if (rd > 0) { ctx.fillStyle = `rgba(${SC[-1]},${a})`; ctx.fillRect(1 + g, r.y, rd, D.bar); }
+    }
+    if (r.cap && f >= 1) { ctx.fillStyle = `rgba(${POCC},.9)`; ctx.fillRect(1 + len - 2, r.y - 1, 2, D.bar + 2); }
+  }
+  // value area: a bracket on the left edge
+  if (va0 >= 0 && ms > 120) {
+    ctx.fillStyle = `rgba(${VOLC},.7)`;
+    ctx.fillRect(0, D.R[va0].y - 1, 1, D.R[va1].y + D.bar + 2 - D.R[va0].y);
+  }
+}
+// POC label after its bar, when there is room. Drawn after the LTP chip so it can step around the chip's real box.
+function drawPocLabel(T, D, ms) {
+  const { ctx } = T, w = T.w, h = T.h;
+  if (!D.real || D.noData || D.pocRow < 0 || ms <= 160 || h < 60 || D.bar < 3) return;
+  const r = D.R[D.pocRow], fs = S.stacked ? 9 : Math.max(7.5 * (S.tx || 1), 8 / (S.s || 1));
+  ctx.font = `700 ${fs}px ${FONT_UI}`; ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+  const tw = ctx.measureText('POC').width, x = Math.min(r.len + 5, w - tw - 10);
+  const y0 = r.y + D.bar / 2 - fs / 2, y1 = y0 + fs;
+  const hit = b => b && x < b.x1 + 2 && x + tw > b.x0 - 2 && y0 < b.y1 + 1 && y1 > b.y0 - 1;
+  const pb = T.plateBox;
+  if (x <= r.len + 2 || (pb && r.y < pb.b + 2 && x < pb.r) || (w >= 130 && hit(T.ltpBox))) return;
+  ctx.fillStyle = `rgba(${POCC},.85)`; ctx.fillText('POC', x, r.y + D.bar / 2 + .5);
+}
 function drawTileCanvas(T, ms, fast) {
   const { ctx } = T; const s = T.s, w = T.w, h = T.h, side = s.side; const D = T.rd;
   if (!ctx || !D) return;
@@ -102,6 +195,8 @@ function drawTileCanvas(T, ms, fast) {
   const ev = !!s.event, look = TILE_LOOK[T.key] || TILE_LOOK.c3, pick = !!T.pick;
   const rgb = SC[side], hot = side > 0 ? COL.bullHot : COL.bearHot;
   const grow = k => ms >= 1e8 ? 1 : 1 - Math.pow(1 - clamp((ms - 6 * k) / 220, 0, 1), 3);
+  if (D.real) drawVolRows(T, D, ms, grow, fast);
+  else {
   // depth bed: faint Bookmap heat behind every row, so no level reads as dead black
   if (!ev) {
     for (let k = 0; k < D.rows; k++) {
@@ -140,6 +235,7 @@ function drawTileCanvas(T, ms, fast) {
         if (side > 0) ctx.fillRect(1 + dom - 1.5, r.y, 1.5, D.bar); else ctx.fillRect(w - 1 - dom, r.y, 1.5, D.bar);
       }
     }
+  }
   }
   if (ev) return;
   // OB zone (SMC box extends right)
@@ -191,6 +287,7 @@ function drawTileCanvas(T, ms, fast) {
       T.ltpBox = { x0: bx, x1: bx + cw, y0: cy - ch / 2, y1: cy + ch / 2 };  // lets the hover chain step around the chip
     }
   }
+  drawPocLabel(T, D, ms);
   // delta meter (spine-facing edge)
   const dmax = T.dmax || Math.abs(s.delta); const len = (w / 2 - 6) * clamp(Math.abs(s.delta) / dmax, 0.12, 1);
   const dy = side > 0 ? h - 4 : 1; ctx.fillStyle = 'rgba(255,255,255,.06)'; ctx.fillRect(4, dy, w - 8, 3);
@@ -227,10 +324,16 @@ function applyTicker(tk, f) {
   if (f.sx < 1) { tk.style.transform = `scaleX(${f.sx.toFixed(3)})`; tk.style.transformOrigin = '0 50%'; tk.style.marginRight = (-(1 - f.sx) * f.width / f.sx).toFixed(1) + 'px'; }
   else { tk.style.transform = ''; tk.style.marginRight = ''; }
 }
+function tileSplitNote(s) {
+  if (!s.ag) return 'No buy/sell split yet (needs the live Upstox feed)';
+  let t = '';
+  if (s.ag.since) { const d = new Date(s.ag.since + 5.5 * 3600e3); t = ` since ${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')} IST`; }
+  return `Green / red = aggressive buy / sell volume (live feed${t}, ${s.ag.cov}% of the day's volume classified); grey = side unknown`;
+}
 function buildTile(M, T, parent, mode, defer) {
   const s = T.s, side = s.side; const pick = !!T.pick; const ev = !!s.event;
   const d = el('div', `tile ${T.key}${pick ? ' pk' : ''}${ev ? ' ev' : ''} ${side > 0 ? 'bu' : 'be'}`, parent);
-  d.dataset.k = s.s; if (!s._anchor) d.title = `${s.s} · Click to copy code · ⌘+Click to open Upstox`;
+  d.dataset.k = s.s; if (!s._anchor) d.title = ev ? `${s.s} · Click to copy code · ⌘+Click to open Upstox` : `${s.s} · Bars = volume traded at each price today (5-min candles); brighter = 70% value area, POC = busiest price · ${tileSplitNote(s)} · Click to copy code · ⌘+Click to open Upstox`;
   d.style.setProperty('--sc', ev ? '255,176,32' : SC[side]); d.style.setProperty('--hi', ev ? '255,176,32' : SCHI[side]);
   if (mode !== 'stack') css(d, { left: T.x, top: T.y, width: T.w, height: T.h });
   else css(d, { position: 'relative', width: '100%', height: T.h });

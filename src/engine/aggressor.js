@@ -54,6 +54,9 @@ class AggressorTracker {
       sellVol: 0,
       unclassifiedVol: 0,
       samples: 0,
+      // per-price split: paise price → [buyVol, sellVol, unclassifiedVol]
+      levels: new Map(),
+      firstTs: null,
     };
   }
 
@@ -102,6 +105,13 @@ class AggressorTracker {
       else st.unclassifiedVol += dVol;
       if (dir !== 0) st.lastDir = dir;
       st.samples += 1;
+
+      // the whole delta is booked at this snapshot's LTP (see "Limits" above)
+      const key = Math.round(ltp * 100);
+      let cell = st.levels.get(key);
+      if (!cell) { cell = [0, 0, 0]; st.levels.set(key, cell); }
+      cell[dir > 0 ? 0 : dir < 0 ? 1 : 2] += dVol;
+      if (st.firstTs === null) st.firstTs = Number(tick.ts) || Date.now();
     }
 
     st.lastVtt = vtt;
@@ -129,6 +139,45 @@ class AggressorTracker {
       coveragePct: st.lastVtt > 0 ? Number(((classified / st.lastVtt) * 100).toFixed(1)) : 0,
       reliable: buyPct !== null && st.samples >= this.minSamples,
       dateKey: st.dateKey,
+    };
+  }
+
+  /**
+   * Buy / sell / unclassified volume by price, binned into `bins` equal bands over the
+   * traded range, for the volume-at-price ladder. Prices are bin edges in rupees; bin i
+   * covers [lo + i·step, lo + (i+1)·step). Returns null until something was classified.
+   * `since` = exchange time (ms) of the first classified update: earlier volume is unknown.
+   */
+  profile(symbol, { bins = 48, now = Date.now() } = {}) {
+    const st = this.bySymbol.get(symbol);
+    if (!st || !st.levels.size) return null;
+    if (st.dateKey !== istDateKey(now)) return null;   // yesterday's split never leaks into today
+    let lo = Infinity;
+    let hi = -Infinity;
+    for (const key of st.levels.keys()) {
+      if (key < lo) lo = key;
+      if (key > hi) hi = key;
+    }
+    const n = hi > lo ? Math.max(1, Math.floor(bins)) : 1;
+    const step = hi > lo ? (hi - lo) / n : 0;
+    const b = new Array(n).fill(0);
+    const s = new Array(n).fill(0);
+    const u = new Array(n).fill(0);
+    for (const [key, cell] of st.levels) {
+      const i = step > 0 ? Math.min(n - 1, Math.floor((key - lo) / step)) : 0;
+      b[i] += cell[0];
+      s[i] += cell[1];
+      u[i] += cell[2];
+    }
+    const classified = st.buyVol + st.sellVol;
+    return {
+      lo: lo / 100,
+      hi: hi / 100,
+      b,
+      s,
+      u,
+      since: st.firstTs,
+      coveragePct: st.lastVtt > 0 ? Number(((classified / st.lastVtt) * 100).toFixed(1)) : 0,
     };
   }
 
