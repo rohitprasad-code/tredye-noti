@@ -112,7 +112,45 @@ class FlowStore {
       );
 
       CREATE INDEX IF NOT EXISTS idx_journal_status ON journal_entries(status, entry_at DESC);
+
+      CREATE TABLE IF NOT EXISTS alert_outcomes (
+        alert_id INTEGER PRIMARY KEY,
+        symbol TEXT NOT NULL,
+        type TEXT,
+        side TEXT NOT NULL,
+        dir INTEGER NOT NULL,
+        entry_price REAL NOT NULL,
+        stop_price REAL,
+        t1_price REAL,
+        t2_price REAL,
+        created_at INTEGER NOT NULL,
+        session_date TEXT NOT NULL,
+        source_mode TEXT,
+        status TEXT NOT NULL DEFAULT 'TRACKING',
+        ret_5m REAL,
+        ret_15m REAL,
+        ret_30m REAL,
+        ret_60m REAL,
+        ret_close REAL,
+        mfe_pct REAL,
+        mae_pct REAL,
+        stop_hit_at INTEGER,
+        t1_hit_at INTEGER,
+        t2_hit_at INTEGER,
+        first_hit TEXT,
+        last_price REAL,
+        last_seen_at INTEGER,
+        updated_at INTEGER NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_outcomes_status ON alert_outcomes(status, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_outcomes_created ON alert_outcomes(created_at DESC);
     `);
+
+    // Additive migrations for older databases
+    const alertCols = new Set(this.db.prepare('PRAGMA table_info(alerts)').all().map(c => c.name));
+    if (!alertCols.has('sector')) this.db.exec('ALTER TABLE alerts ADD COLUMN sector TEXT');
+    if (!alertCols.has('source_mode')) this.db.exec('ALTER TABLE alerts ADD COLUMN source_mode TEXT');
   }
 
   insertAlert(alert) {
@@ -121,12 +159,14 @@ class FlowStore {
         symbol, type, priority, side, action, title, message,
         ltp, chg_pct, agree, total_checks, strength_score,
         ob_bot, ob_top, ob_dist_pct, ob_str, ob_status,
-        invalidation, target1, target2, reviewed, created_at
+        invalidation, target1, target2, reviewed, created_at,
+        sector, source_mode
       ) VALUES (
         ?, ?, ?, ?, ?, ?, ?,
         ?, ?, ?, ?, ?,
         ?, ?, ?, ?, ?,
-        ?, ?, ?, 0, ?
+        ?, ?, ?, 0, ?,
+        ?, ?
       )
     `);
     const res = stmt.run(
@@ -150,9 +190,57 @@ class FlowStore {
       alert.invalidation ?? null,
       alert.target1 ?? null,
       alert.target2 ?? null,
-      alert.createdAt || Date.now()
+      alert.createdAt || Date.now(),
+      alert.sector ?? null,
+      alert.sourceMode ?? null
     );
     return Number(res.lastInsertRowid);
+  }
+
+  // ---------- Alert outcomes (forward returns / MFE / MAE / first hit) ----------
+
+  static OUTCOME_COLUMNS = [
+    'alert_id', 'symbol', 'type', 'side', 'dir', 'entry_price', 'stop_price', 't1_price', 't2_price',
+    'created_at', 'session_date', 'source_mode', 'status', 'ret_5m', 'ret_15m', 'ret_30m', 'ret_60m',
+    'ret_close', 'mfe_pct', 'mae_pct', 'stop_hit_at', 't1_hit_at', 't2_hit_at', 'first_hit',
+    'last_price', 'last_seen_at', 'updated_at',
+  ];
+
+  insertOutcome(row) {
+    const cols = FlowStore.OUTCOME_COLUMNS;
+    this.db
+      .prepare(`INSERT OR IGNORE INTO alert_outcomes (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`)
+      .run(...cols.map(c => (row[c] === undefined ? null : row[c])));
+  }
+
+  updateOutcome(row) {
+    const cols = FlowStore.OUTCOME_COLUMNS.filter(c => c !== 'alert_id');
+    this.db
+      .prepare(`UPDATE alert_outcomes SET ${cols.map(c => `${c} = ?`).join(', ')} WHERE alert_id = ?`)
+      .run(...cols.map(c => (row[c] === undefined ? null : row[c])), row.alert_id);
+  }
+
+  listTrackingOutcomes() {
+    return this.db
+      .prepare(`SELECT * FROM alert_outcomes WHERE status = 'TRACKING' ORDER BY created_at ASC`)
+      .all()
+      .map(r => ({ ...r }));
+  }
+
+  /** Alerts joined with their outcomes since `sinceMs` (for the edge report). */
+  listOutcomeRows(sinceMs = 0, { includeDemo = false } = {}) {
+    const demoFilter = includeDemo ? '' : `AND (o.source_mode IS NULL OR o.source_mode NOT LIKE 'DEMO%')`;
+    return this.db
+      .prepare(`
+        SELECT o.*, a.agree, a.total_checks, a.strength_score, a.ob_status, a.ob_dist_pct,
+               a.ob_str, a.chg_pct, a.sector, a.title
+        FROM alert_outcomes o
+        JOIN alerts a ON a.id = o.alert_id
+        WHERE o.created_at >= ? ${demoFilter}
+        ORDER BY o.created_at DESC
+      `)
+      .all(sinceMs)
+      .map(r => ({ ...r }));
   }
 
   getLastAlertTime(symbol, type) {

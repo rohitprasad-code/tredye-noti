@@ -11,6 +11,7 @@
  *   4. cvd > 0
  *   5. depth imbalance > 0 (when imb or depth.tbq + depth.tsq > 0 is present)
  *
+ * Each check is BULL, BEAR or NEUTRAL (inside NEUTRAL_BANDS); missing inputs are dropped.
  * score = bullCount - bearCount
  * side  = score > 0 ? 'BULL' : score < 0 ? 'BEAR' : 'FLAT'
  */
@@ -40,27 +41,78 @@ function getDepthImbalance(stock) {
   return null;
 }
 
-function evaluateConfluence(stock) {
-  const checks = [
-    { key: 'vwap', label: 'LTP > VWAP', bull: stock.ltp > stock.vwap },
-    { key: 'poc', label: 'LTP > POC', bull: stock.ltp > stock.poc },
-    { key: 'cvd', label: 'CVD > 0', bull: stock.cvd > 0 },
-  ];
-  if (typeof stock.buy_pct === 'number' && Number.isFinite(stock.buy_pct)) {
-    checks.splice(2, 0, { key: 'buy_pct', label: 'Buy% > 50', bull: stock.buy_pct > 50 });
-  }
+/**
+ * Neutral bands (fix for tie bias): a value inside its band counts for NEITHER side.
+ * The original port used `ltp > vwap` for bull and everything else (including exact ties
+ * and missing data) for bear, which tilted flat/early-session stocks bearish.
+ *   pricePct  : |ltp − level| / level * 100 within this % → neutral (VWAP, POC)
+ *   buyPct    : |buy_pct − 50| within this many points → neutral
+ *   imbPct    : |book imbalance| within this % → neutral
+ *   cvdVolFrac: |cvd| within this fraction of session volume → neutral (exact 0 if volume unknown)
+ * Missing inputs drop the check entirely (it no longer counts as bearish).
+ */
+const NEUTRAL_BANDS = Object.freeze({
+  pricePct: 0.03,
+  buyPct: 1,
+  imbPct: 2,
+  cvdVolFrac: 0.001,
+});
+
+function isNum(v) {
+  return typeof v === 'number' && Number.isFinite(v);
+}
+
+function classifySigned(value, band = 0) {
+  if (!isNum(value)) return null;
+  if (Math.abs(value) <= band) return 0;
+  return value > 0 ? 1 : -1;
+}
+
+// imb can arrive as -1..1 (fraction) or -100..100 (percent) depending on source
+function normalizeImbPct(imb) {
+  if (!isNum(imb)) return null;
+  return Math.abs(imb) <= 1 ? imb * 100 : imb;
+}
+
+function makeCheck(key, label, dir) {
+  const state = dir > 0 ? 'BULL' : dir < 0 ? 'BEAR' : 'NEUTRAL';
+  return { key, label, state, dir, bull: dir > 0, bear: dir < 0 };
+}
+
+function evaluateConfluence(stock, bands = NEUTRAL_BANDS) {
+  const b = { ...NEUTRAL_BANDS, ...(bands || {}) };
+  const checks = [];
+  const ltp = Number(stock.ltp);
+  const pctFrom = level => (isNum(ltp) && ltp > 0 && isNum(level) && level > 0 ? ((ltp - level) / level) * 100 : null);
+
+  const vwapDir = classifySigned(pctFrom(stock.vwap), b.pricePct);
+  if (vwapDir !== null) checks.push(makeCheck('vwap', 'LTP > VWAP', vwapDir));
+
+  const pocDir = classifySigned(pctFrom(stock.poc), b.pricePct);
+  if (pocDir !== null) checks.push(makeCheck('poc', 'LTP > POC', pocDir));
+
+  const buyDir = classifySigned(isNum(stock.buy_pct) ? stock.buy_pct - 50 : null, b.buyPct);
+  if (buyDir !== null) checks.push(makeCheck('buy_pct', 'Buy% > 50', buyDir));
+
+  const vol = Number(stock.volume);
+  const cvdBand = isNum(vol) && vol > 0 ? vol * b.cvdVolFrac : 0;
+  const cvdDir = classifySigned(stock.cvd, cvdBand);
+  if (cvdDir !== null) checks.push(makeCheck('cvd', 'CVD > 0', cvdDir));
 
   const imb = getDepthImbalance(stock);
-  if (imb !== null) {
-    checks.push({ key: 'imb', label: 'Book Imb > 0', bull: imb > 0 });
+  const imbDir = classifySigned(normalizeImbPct(imb), b.imbPct);
+  if (imbDir !== null) {
+    checks.push(makeCheck('imb', 'Book Imb > 0', imbDir));
   } else if (stock.flowScore !== undefined || stock.chg_pct !== undefined) {
-    const netFlow = stock.flowScore !== undefined ? stock.flowScore : stock.chg_pct;
-    checks.push({ key: 'flow', label: 'Net Flow > 0', bull: Number(netFlow) > 0 });
+    const netFlow = Number(stock.flowScore !== undefined ? stock.flowScore : stock.chg_pct);
+    const flowDir = classifySigned(netFlow, 0);
+    if (flowDir !== null) checks.push(makeCheck('flow', 'Net Flow > 0', flowDir));
   }
 
-  const bull = checks.filter(c => c.bull).length;
+  const bull = checks.filter(c => c.dir > 0).length;
+  const bear = checks.filter(c => c.dir < 0).length;
+  const neutral = checks.length - bull - bear;
   const n = checks.length;
-  const bear = n - bull;
   const score = bull - bear;
   const side = score > 0 ? 'BULL' : score < 0 ? 'BEAR' : 'FLAT';
   const agree = side === 'BULL' ? bull : side === 'BEAR' ? bear : Math.max(bull, bear);
@@ -68,6 +120,7 @@ function evaluateConfluence(stock) {
   return {
     bull,
     bear,
+    neutral,
     n,
     agree,
     score,
@@ -78,16 +131,55 @@ function evaluateConfluence(stock) {
   };
 }
 
+/** 90th percentile of |values| (finite, non-zero), never below `floor`. */
+function p90Abs(values, floor) {
+  const abs = values.filter(isNum).map(Math.abs).filter(v => v > 0).sort((a, b) => a - b);
+  if (!abs.length) return floor;
+  const v = abs[Math.min(abs.length - 1, Math.floor(abs.length * 0.9))];
+  return Math.max(floor, v);
+}
+
+/**
+ * Average candle range as % of close over the trailing `lookback` candles
+ * (candle tuples `[t, o, h, l, c, ...]`). Used as the stock's own intraday volatility unit.
+ */
+function trailingRangePct(candles = [], lookback = 14) {
+  if (!Array.isArray(candles) || candles.length === 0) return null;
+  const tail = candles.slice(-lookback);
+  const vals = tail
+    .map(c => (Number(c[4]) > 0 ? ((Number(c[2]) - Number(c[3])) / Number(c[4])) * 100 : null))
+    .filter(v => isNum(v) && v >= 0);
+  if (!vals.length) return null;
+  const avg = vals.reduce((a, v) => a + v, 0) / vals.length;
+  return avg > 0 ? avg : null;
+}
+
 /**
  * Ranks all stocks in an `/api/orderflow` response:
  * 1. Computes exact Tredye tags (`BULLISH #1`, `BEARISH #1`, `MIXED FLOW`) and `chgRank`
  * 2. Computes a 0–100 composite `strengthScore` in the direction of `side`:
- *    - Confluence ratio (agree / n): 40 pts
- *    - Buy/sell dominance (|buy_pct - 50| / 25 capped at 1): 20 pts
- *    - Normalized rupee CVD across the universe in flow direction: 15 pts
- *    - Order-book depth imbalance in flow direction: 10 pts
- *    - VWAP extension in flow direction (|ltp - vwap| / vwap up to 1.5%): 15 pts
+ *    - Confluence ratio (agree / n, neutral checks count against): 40 pts
+ *    - Buy/sell dominance, scaled by the universe P90 of |buy_pct − 50|: 20 pts
+ *    - Rupee CVD, scaled by the universe P90 of |rupeeFlowCr|: 15 pts
+ *    - Book imbalance, scaled by the universe P90 of |imb|: 10 pts
+ *    - VWAP distance in the stock's own volatility units (ATR%), scaled by the
+ *      universe P90 of that distance: 15 pts
+ *
+ * Every component is relative to what the strongest ~10% of the universe shows right now,
+ * instead of fixed constants (/22, /35, /1.25%) that treated a ₹200 PSU bank and a
+ * ₹12,000 stock as equally volatile. Floors stop a dead tape from awarding full points
+ * to tiny edges.
+ *
+ * options.volPctBySymbol: { SYMBOL: avgCandleRangePct } (see trailingRangePct). Stocks
+ * without it fall back to a raw-% VWAP distance scaled by its own universe P90.
  */
+const SCALE_FLOORS = Object.freeze({
+  buyEdge: 5,       // pts of buy% away from 50
+  imbPct: 10,       // % book imbalance
+  vwapAtr: 0.5,     // VWAP distance in ATR units
+  vwapPct: 0.25,    // VWAP distance in raw %
+});
+
 function scoreAndRankUniverse(stocks = [], options = {}) {
   if (!Array.isArray(stocks) || stocks.length === 0) {
     return {
@@ -111,14 +203,29 @@ function scoreAndRankUniverse(stocks = [], options = {}) {
     ? new Set(options.ignoreSymbols.map(s => s.toUpperCase()))
     : null;
 
-  // Compute P90 rupee flow across the universe for normalization
-  const absFlows = stocks
-    .map(s => Math.abs(estimateRupeeFlowCr(s)))
-    .filter(v => v > 0)
-    .sort((a, b) => a - b);
-  const p90FlowCr = absFlows.length
-    ? absFlows[Math.min(absFlows.length - 1, Math.floor(absFlows.length * 0.9))] || 1
-    : 1;
+  const volPctBySymbol = options.volPctBySymbol || {};
+  const bands = options.neutralBands || NEUTRAL_BANDS;
+
+  // Evaluate confluence once per stock
+  const confBySymbol = new Map(stocks.map(s => [s.symbol, evaluateConfluence(s, bands)]));
+
+  // Universe distributions for relative (percentile) scaling
+  const p90FlowCr = p90Abs(stocks.map(estimateRupeeFlowCr), 1e-9);
+  const p90BuyEdge = p90Abs(stocks.map(s => (isNum(s.buy_pct) ? s.buy_pct - 50 : null)), SCALE_FLOORS.buyEdge);
+  const p90Imb = p90Abs([...confBySymbol.values()].map(c => normalizeImbPct(c.imb)), SCALE_FLOORS.imbPct);
+
+  const vwapDistPct = s => (isNum(s.vwap) && s.vwap > 0 && isNum(s.ltp) ? ((s.ltp - s.vwap) / s.vwap) * 100 : null);
+  const vwapAtrUnits = s => {
+    const d = vwapDistPct(s);
+    const vol = Number(volPctBySymbol[s.symbol]);
+    return d !== null && vol > 0 ? d / vol : null;
+  };
+  const p90VwapAtr = p90Abs(stocks.map(vwapAtrUnits), SCALE_FLOORS.vwapAtr);
+  const p90VwapPct = p90Abs(
+    stocks.filter(s => vwapAtrUnits(s) === null).map(vwapDistPct),
+    SCALE_FLOORS.vwapPct
+  );
+  const clamp01 = v => Math.max(0, Math.min(1, v));
 
   // Sort by % change descending for Tredye's chgRank
   const chgSortedSymbols = [...stocks]
@@ -126,34 +233,33 @@ function scoreAndRankUniverse(stocks = [], options = {}) {
     .map(s => s.symbol);
 
   const items = stocks.map(s => {
-    const conf = evaluateConfluence(s);
+    const conf = confBySymbol.get(s.symbol) || evaluateConfluence(s, bands);
     const dir = conf.side === 'BULL' ? 1 : conf.side === 'BEAR' ? -1 : 0;
 
     // 1. Confluence component (0–40)
     const confluencePts = conf.n > 0 ? (conf.agree / conf.n) * 40 : 0;
 
     // 2. Buy/Sell dominance component (0–20)
-    const signedBuyEdge = ((s.buy_pct ?? 50) - 50) * dir;
-    const buyDominancePts = Math.max(0, Math.min(1, signedBuyEdge / 22)) * 20;
+    const signedBuyEdge = ((isNum(s.buy_pct) ? s.buy_pct : 50) - 50) * dir;
+    const buyDominancePts = clamp01(signedBuyEdge / p90BuyEdge) * 20;
 
     // 3. Rupee CVD component (0–15)
     const signedFlowCr = conf.rupeeFlowCr * dir;
-    const cvdPts = Math.max(0, Math.min(1, signedFlowCr / p90FlowCr)) * 15;
+    const cvdPts = clamp01(signedFlowCr / p90FlowCr) * 15;
 
     // 4. Depth imbalance component (0–10)
-    let imbRatio = 0;
-    if (conf.imb !== null) {
-      // imb can be -1..1 or -100..100 depending on endpoint scale
-      const normImb = Math.abs(conf.imb) <= 1 ? conf.imb * 100 : conf.imb;
-      imbRatio = Math.max(0, Math.min(1, (normImb * dir) / 35));
-    } else {
-      imbRatio = 0.5; // neutral when market closed / depth unavailable
-    }
+    const normImb = normalizeImbPct(conf.imb);
+    const imbRatio = normImb !== null
+      ? clamp01((normImb * dir) / p90Imb)
+      : 0.5; // neutral when market closed / depth unavailable
     const depthPts = imbRatio * 10;
 
-    // 5. VWAP impulse component (0–15)
-    const vwapPct = s.vwap ? (((s.ltp - s.vwap) / s.vwap) * 100) * dir : 0;
-    const vwapPts = Math.max(0, Math.min(1, vwapPct / 1.25)) * 15;
+    // 5. VWAP impulse component (0–15), in the stock's own volatility units when available
+    const atrUnits = vwapAtrUnits(s);
+    const vwapRatio = atrUnits !== null
+      ? clamp01((atrUnits * dir) / p90VwapAtr)
+      : clamp01(((vwapDistPct(s) ?? 0) * dir) / p90VwapPct);
+    const vwapPts = vwapRatio * 15;
 
     const strengthScore = dir === 0
       ? Math.round(confluencePts)
@@ -187,6 +293,7 @@ function scoreAndRankUniverse(stocks = [], options = {}) {
           bull: it.bull,
           bear: it.bear,
           n: it.n,
+          neutral: it.neutral,
           agree: it.agree,
           score: it.score,
           strengthScore: it.strengthScore,
@@ -208,6 +315,7 @@ function scoreAndRankUniverse(stocks = [], options = {}) {
         bull: it.bull,
         bear: it.bear,
         n: it.n,
+        neutral: it.neutral,
         agree: it.agree,
         score: 0,
         strengthScore: it.strengthScore,
@@ -291,6 +399,10 @@ function scoreAndRankUniverse(stocks = [], options = {}) {
 }
 
 module.exports = {
+  NEUTRAL_BANDS,
+  SCALE_FLOORS,
+  normalizeImbPct,
+  trailingRangePct,
   estimateRupeeFlowCr,
   getDepthImbalance,
   evaluateConfluence,

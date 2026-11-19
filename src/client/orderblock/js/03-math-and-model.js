@@ -656,7 +656,7 @@ function buildModel(D) {
     const sec = secMap[s.sec]; const sc = sec ? sec.chg : 0;
     s.secChg = sc;
     s.pips = typeof s.flowAgree === 'number'
-      ? Array.from({ length: 5 }, (_, i) => i < s.flowAgree)
+      ? Array.from({ length: Math.max(1, Math.min(5, s.flowTotal || 5)) }, (_, i) => i < s.flowAgree)
       : [
           Math.abs(2 * s.p - 1) >= 0.9,
           s.side > 0 ? (s.bu === 'LONG BUILD-UP' || s.bu === 'LONG BUILDUP') : (s.bu === 'SHORT BUILD-UP' || s.bu === 'SHORT BUILDUP'),

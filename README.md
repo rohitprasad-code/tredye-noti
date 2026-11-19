@@ -60,7 +60,7 @@ Then open **http://localhost:4600** in your browser.
 | `npm start` | Start the live service & dashboard (`node --env-file-if-exists=.env src/index.js`) |
 | `npm run dev` | Same as `npm start` for local development |
 | `npm run dry-run` | Print a single CLI summary of top setups & alerts and exit (`--dry-run`) |
-| `npm test` | Run the test suite (`node --test test/engine.test.js`, 24 tests) |
+| `npm test` | Run the test suite (`test/engine.test.js` + `test/fixes.test.js`, 39 tests) |
 | `npm run next:dev` | Run the standalone Next.js App Router UI shell (`src/app/`) on port `3000` |
 | `npm run build` | Build the Next.js App Router frontend (`next build`) |
 
@@ -71,6 +71,7 @@ Then open **http://localhost:4600** in your browser.
 ## Pages & Navigation
 
 - **`/` or `/app/orderblock` — Order Block Terminal:** Live 218-stock flow funnel, sector & side filters (`All`, `Bullish`, `Bearish`), 3 sort modes, 15m/5m candlestick & Order Block cards, hover inspector, and dark/light theme toggle.
+- **`/app/edge` — Edge Report:** What price did after every live alert — 5/15/30/60-min and close returns, MFE/MAE, and whether T1 or the stop traded first — grouped by confluence, OB status, strength, time of day, type and sector.
 - **`/app/settings` (or `/settings`) — Settings:** Accessible from the bottom **⚙ Settings** icon in the left sidebar. Configure **Upstox API** credentials (1-Year Analytics Token or OAuth login), **Display & Ambient FX**, and **Terminal Rules** (poll interval, Top-N, min confluence signals, OB proximity %, confirm polls, min price, watchlist, and ignore list).
 
 ---

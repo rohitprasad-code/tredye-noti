@@ -225,7 +225,12 @@ function getDirectionalFlowMetrics(c, isBull) {
   const total = Number(c.checks?.length || c.totalChecks || 5);
   let agreeInDir;
   if (Array.isArray(c.checks) && c.checks.length > 0) {
-    agreeInDir = c.checks.filter(ch => (isBull ? ch.bull : !ch.bull)).length;
+    // Neutral checks count for neither side. Legacy check objects without `state`
+    // fall back to the boolean `bull` flag.
+    const want = isBull ? 'BULL' : 'BEAR';
+    agreeInDir = c.checks.filter(ch =>
+      ch.state ? ch.state === want : isBull ? ch.bull : !ch.bull
+    ).length;
   } else if (c.side === wantSide) {
     agreeInDir = Number(c.agree || 0);
   } else if (c.side && c.side !== 'FLAT') {

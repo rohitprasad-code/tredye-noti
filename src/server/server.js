@@ -235,6 +235,21 @@ function createDashboardServer(appController) {
   app.get(['/', '/app', '/app/orderblock'], (_req, res) => {
     res.sendFile(path.join(PUBLIC_DIR, 'orderblock.html'));
   });
+  // Alert outcome / edge report (forward returns, MFE/MAE, T1-vs-stop by signal group)
+  app.get('/api/edge-report', (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    res.json(
+      appController.getEdgeReport({
+        days: req.query.days,
+        includeDemo: String(req.query.demo || '') === '1',
+      })
+    );
+  });
+
+  app.get(['/edge', '/app/edge'], (_req, res) => {
+    res.sendFile(path.join(PUBLIC_DIR, 'edge.html'));
+  });
+
   app.get(['/settings', '/app/settings'], (_req, res) => {
     res.sendFile(path.join(PUBLIC_DIR, 'settings.html'));
   });

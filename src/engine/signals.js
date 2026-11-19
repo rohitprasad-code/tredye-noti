@@ -5,6 +5,13 @@ function fmtPrice(v) {
   return `₹${Number(v).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+// buy_pct can be absent (no trade-side data yet) — never print "NaN%"
+function fmtBuy(v, sell = false) {
+  const n = Number(v);
+  if (v === null || v === undefined || !Number.isFinite(n)) return '—';
+  return String(Math.round(sell ? 100 - n : n));
+}
+
 /**
  * Stateful signal & reminder evaluator.
  *
@@ -109,7 +116,7 @@ class SignalEngine {
         const title = `🎯 ${sym} — IN ${actionVerb} ORDER BLOCK (${flow.agree}/${flow.n} ${flow.side})`;
         const message =
           `${sym} (${fmtPrice(stock.ltp)}, ${stock.chg_pct >= 0 ? '+' : ''}${Number(stock.chg_pct || 0).toFixed(2)}%) is trading INSIDE the ${obTypeLabel} ${plan.zoneText} ` +
-          `(${primaryOB.str}× impulse, ${primaryOB.timeIST}). Flow: ${flow.agree}/${flow.n} ${flow.side} · Buy ${Math.round(stock.buy_pct)}% · CVD ${flow.rupeeFlowCr >= 0 ? '+' : ''}${flow.rupeeFlowCr.toFixed(2)} Cr. ` +
+          `(${primaryOB.str}× impulse, ${primaryOB.timeIST}). Flow: ${flow.agree}/${flow.n} ${flow.side} · Buy ${fmtBuy(stock.buy_pct)}% · CVD ${flow.rupeeFlowCr >= 0 ? '+' : ''}${flow.rupeeFlowCr.toFixed(2)} Cr. ` +
           `Ref invalidation: ${fmtPrice(plan.invalidation)}${plan.target1 ? ` · Ref T1: ${fmtPrice(plan.target1)}` : ''}. Review setup manually.`;
 
         alerts.push({
@@ -154,7 +161,7 @@ class SignalEngine {
         const title = `⚡ ${sym} — ${primaryOB.distPct.toFixed(2)}% from ${actionVerb} OB (${flow.agree}/${flow.n} ${flow.side})`;
         const message =
           `${sym} (${fmtPrice(stock.ltp)}) is ${primaryOB.distPct.toFixed(2)}% ${dirWord} ${primaryOB.status === 'UNTESTED' ? 'untested' : 'active'} ${obTypeLabel} ${plan.zoneText} (${primaryOB.str}×). ` +
-          `Strong ${flow.side} flow (${flow.agree}/${flow.n}, score ${flow.strengthScore}/100, Buy ${Math.round(stock.buy_pct)}%). ` +
+          `Strong ${flow.side} flow (${flow.agree}/${flow.n}, score ${flow.strengthScore}/100, Buy ${fmtBuy(stock.buy_pct)}%). ` +
           `Ref invalidation: ${fmtPrice(plan.invalidation)}${plan.target1 ? ` · Ref T1: ${fmtPrice(plan.target1)}` : ''}. Review for potential ${actionVerb.toLowerCase()} entry.`;
 
         alerts.push({
@@ -198,7 +205,7 @@ class SignalEngine {
 
         const title = `${flow.side === 'BULL' ? '🟢' : '🔴'} ${sym} — Top ${flow.side} Flow #${flow.rank} (${flow.agree}/${flow.n})`;
         const message =
-          `${sym} (${fmtPrice(stock.ltp)}, ${stock.chg_pct >= 0 ? '+' : ''}${Number(stock.chg_pct || 0).toFixed(2)}%) has held strong ${flow.side} flow (${flow.agree}/${flow.n} signals, strength ${flow.strengthScore}/100, Buy ${Math.round(stock.buy_pct)}%, CVD ${flow.rupeeFlowCr >= 0 ? '+' : ''}${flow.rupeeFlowCr.toFixed(2)} Cr). ` +
+          `${sym} (${fmtPrice(stock.ltp)}, ${stock.chg_pct >= 0 ? '+' : ''}${Number(stock.chg_pct || 0).toFixed(2)}%) has held strong ${flow.side} flow (${flow.agree}/${flow.n} signals, strength ${flow.strengthScore}/100, Buy ${fmtBuy(stock.buy_pct)}%, CVD ${flow.rupeeFlowCr >= 0 ? '+' : ''}${flow.rupeeFlowCr.toFixed(2)} Cr). ` +
           `${obSnippet}. Review on Tredye.`;
 
         alerts.push({
@@ -253,7 +260,7 @@ class SignalEngine {
       if (flipped && !this.isCoolingDown(sym, 'FLOW_FLIP', cooldownMinutes, nowMs)) {
         const title = `⚠️ ${sym} — Flow Flipped ${watched.side} → ${curFlow.side} (${curFlow.agree}/${curFlow.n})`;
         const message =
-          `${sym} (${fmtPrice(stock.ltp)}) flipped from ${watched.side} to ${curFlow.side} (${curFlow.agree}/${curFlow.n} signals, Buy ${Math.round(stock.buy_pct)}%). ` +
+          `${sym} (${fmtPrice(stock.ltp)}) flipped from ${watched.side} to ${curFlow.side} (${curFlow.agree}/${curFlow.n} signals, Buy ${fmtBuy(stock.buy_pct)}%). ` +
           `Earlier ${watched.side === 'BULL' ? 'BUY' : 'SELL'} setup${watched.obZone ? ` at ${watched.obZone}` : ''} is invalidated.`;
 
         alerts.push({
@@ -342,7 +349,7 @@ class SignalEngine {
       const title = `⏰ Reminder: ${sym} — ${verdict}`;
       const message =
         `Re-check for ${sym} at ${fmtPrice(stock.ltp)} (${stock.chg_pct >= 0 ? '+' : ''}${Number(stock.chg_pct || 0).toFixed(2)}%): ` +
-        `Flow is ${flow.side} (${flow.agree}/${flow.n}, score ${flow.strengthScore}/100, Buy ${Math.round(stock.buy_pct)}%). ` +
+        `Flow is ${flow.side} (${flow.agree}/${flow.n}, score ${flow.strengthScore}/100, Buy ${fmtBuy(stock.buy_pct)}%). ` +
         `${obPart}.${rem.note ? ` Note: ${rem.note}` : ''}`;
 
       reminderAlerts.push({
@@ -460,7 +467,7 @@ class SignalEngine {
           if (hitUserTarget) reasons.push(`Target ${fmtPrice(item.targetPrice)} reached`);
           if (hitUserStop) reasons.push(`Stop floor ${fmtPrice(item.stopPrice)} breached`);
           if (inBearOB) reasons.push(`Trading INSIDE Bearish Supply OB ${bearZoneStr} (${bearOB.str}×)`);
-          if (flowTurnedBear) reasons.push(`Tredye Flow is ${flow.agree}/${flow.n} BEAR (Sell ${Math.round(100 - stock.buy_pct)}%, CVD ${flow.rupeeFlowCr >= 0 ? '+' : ''}${flow.rupeeFlowCr.toFixed(1)} Cr)`);
+          if (flowTurnedBear) reasons.push(`Tredye Flow is ${flow.agree}/${flow.n} BEAR (Sell ${fmtBuy(stock.buy_pct, true)}%, CVD ${flow.rupeeFlowCr >= 0 ? '+' : ''}${flow.rupeeFlowCr.toFixed(1)} Cr)`);
 
           verdictTitle = '🛑 STEP BACK / SELL REMINDER';
           verdictReason = reasons.join(' · ') + `. Take a step back, review exit, then switch to "Buy at Right Time" to wait for Bullish OB ${bullZoneStr}.`;
@@ -478,7 +485,7 @@ class SignalEngine {
           const reasons = [];
           if (nearBearOB) reasons.push(`${bearOB.distPct.toFixed(2)}% from Bearish Supply OB ${bearZoneStr}`);
           if (flowWeakeningBear) reasons.push(`Flow weakening (${flow.agree}/${flow.n} BEAR)`);
-          if (belowVwapSelling) reasons.push(`LTP slipped below VWAP (${fmtPrice(stock.vwap)}) with ${Math.round(100 - stock.buy_pct)}% selling`);
+          if (belowVwapSelling) reasons.push(`LTP slipped below VWAP (${fmtPrice(stock.vwap)}) with ${fmtBuy(stock.buy_pct, true)}% selling`);
 
           verdictTitle = '⚠️ CAUTION — PREPARE TO STEP BACK';
           verdictReason = reasons.join(' · ') + `. Watch closely for rejection near ${bearZoneStr}.`;
@@ -490,7 +497,7 @@ class SignalEngine {
           verdictTone = 'up';
           verdictTitle = '✅ HOLD — BUYERS IN CONTROL';
           verdictReason =
-            `Flow is ${flow.side} (${flow.agree}/${flow.n}, Buy ${Math.round(stock.buy_pct)}%, above VWAP ${fmtPrice(stock.vwap)}). ` +
+            `Flow is ${flow.side} (${flow.agree}/${flow.n}, Buy ${fmtBuy(stock.buy_pct)}%, above VWAP ${fmtPrice(stock.vwap)}). ` +
             `Next Sell / Step-Back wall: ${bearZoneStr}${bullOB ? ` · Trailing Bullish OB floor: ${bullZoneStr}` : ''}.`;
         }
       } else {
@@ -515,7 +522,7 @@ class SignalEngine {
 
           verdictTitle = '🎯 BUY AT RIGHT TIME — TREDYE OB + FLOW ALIGNED';
           verdictReason =
-            `${sym} is ${zoneDetail} with ${flow.agree}/${flow.n} ${flow.side} flow (Buy ${Math.round(stock.buy_pct)}%, CVD ${flow.rupeeFlowCr >= 0 ? '+' : ''}${flow.rupeeFlowCr.toFixed(1)} Cr). ` +
+            `${sym} is ${zoneDetail} with ${flow.agree}/${flow.n} ${flow.side} flow (Buy ${fmtBuy(stock.buy_pct)}%, CVD ${flow.rupeeFlowCr >= 0 ? '+' : ''}${flow.rupeeFlowCr.toFixed(1)} Cr). ` +
             `Ref Invalidation: ${bullOB ? fmtPrice(bullOB.bot * 0.998) : fmtPrice(kl.s1)} · Target: ${bearZoneStr}.`;
 
           alertTitle = `🎯 My Tracker BUY NOW: ${sym} — Right Time at Bullish OB (${fmtPrice(ltp)})`;
@@ -530,8 +537,8 @@ class SignalEngine {
 
           verdictTitle = '⚡ GET READY — APPROACHING BUY WINDOW';
           verdictReason = nearBullOB
-            ? `Price is ${bullOB.distPct.toFixed(2)}% from Bullish OB ${bullZoneStr}, waiting for stronger buyer aggression (currently ${flow.agree}/${flow.n} ${flow.side}, Buy ${Math.round(stock.buy_pct)}%).`
-            : `Strong ${flow.agree}/${flow.n} BULL flow active (Buy ${Math.round(stock.buy_pct)}%). Best pullback entry zone: Bullish OB ${bullZoneStr}.`;
+            ? `Price is ${bullOB.distPct.toFixed(2)}% from Bullish OB ${bullZoneStr}, waiting for stronger buyer aggression (currently ${flow.agree}/${flow.n} ${flow.side}, Buy ${fmtBuy(stock.buy_pct)}%).`
+            : `Strong ${flow.agree}/${flow.n} BULL flow active (Buy ${fmtBuy(stock.buy_pct)}%). Best pullback entry zone: Bullish OB ${bullZoneStr}.`;
 
           alertTitle = `⚡ My Tracker Buy Watch: ${sym} — Setup Forming (${fmtPrice(ltp)})`;
           alertMsg = `${sym} (${fmtPrice(ltp)}): ${verdictReason}`;
@@ -540,7 +547,7 @@ class SignalEngine {
           verdictTone = 'neutral';
           verdictTitle = '⏳ STEPPED BACK — WAIT FOR RIGHT BUY ZONE';
           verdictReason =
-            `Current flow is ${flow.side} (${flow.agree}/${flow.n}, Buy ${Math.round(stock.buy_pct)}%). ` +
+            `Current flow is ${flow.side} (${flow.agree}/${flow.n}, Buy ${fmtBuy(stock.buy_pct)}%). ` +
             `Wait patiently for pullback into Bullish OB ${bullZoneStr} with BULL flow before buying.`;
         }
       }

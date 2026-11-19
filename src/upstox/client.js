@@ -6,6 +6,7 @@ const zlib = require('node:zlib');
 const WebSocket = require('ws');
 const protobuf = require('protobufjs');
 const { normalizeBearerToken, decodeJwtClaims, isJwtExpired } = require('./jwt');
+const { AggressorTracker } = require('../engine/aggressor');
 
 const UPSTOX_API_BASE = 'https://api.upstox.com';
 const INSTRUMENTS_NSE_URL = 'https://assets.upstox.com/market-quote/instruments/exchange/NSE.json.gz';
@@ -25,12 +26,17 @@ function istDateStr(tsOrIso) {
 /**
  * Computes buy% and order-book imbalance from Upstox total buy/sell quantities.
  */
+/**
+ * Resting-book stats. `bookBuyPct` is the SAME information as `imb` (both are tbq vs tsq),
+ * so it is exposed for display only and must NOT feed the `buy_pct` confluence check —
+ * that would count the order book twice. Trade-side buy% comes from AggressorTracker.
+ */
 function computeOrderBookStats(tbq, tsq) {
   const total = tbq + tsq;
-  if (total <= 0) return { buyPct: null, imb: null };
-  const buyPct = tbq > 0 && tsq > 0 ? Number(((tbq / total) * 100).toFixed(2)) : null;
+  if (total <= 0) return { bookBuyPct: null, imb: null };
+  const bookBuyPct = tbq > 0 && tsq > 0 ? Number(((tbq / total) * 100).toFixed(2)) : null;
   const imb = Number((((tbq - tsq) / total) * 100).toFixed(2));
-  return { buyPct, imb };
+  return { bookBuyPct, imb };
 }
 
 class UpstoxClient {
@@ -70,6 +76,7 @@ class UpstoxClient {
     this.wsAttempts = 0;
     this.wsWantedKeys = [];
     this.onTickCallback = null;
+    this.aggressor = new AggressorTracker({ minSamples: 20 });
     this.lastTickAt = 0;
     this.lastError = null;
     this.marketStatus = null;
@@ -588,7 +595,7 @@ class UpstoxClient {
         const chgPct = prevClose > 0 ? ((ltp - prevClose) / prevClose) * 100 : 0;
         const tbq = Number(val.total_buy_quantity || 0);
         const tsq = Number(val.total_sell_quantity || 0);
-        const { buyPct, imb } = computeOrderBookStats(tbq, tsq);
+        const { bookBuyPct, imb } = computeOrderBookStats(tbq, tsq);
 
         const lastTradeDate =
           istDateStr(val.last_trade_time) || istDateStr(val.timestamp) || '';
@@ -607,7 +614,7 @@ class UpstoxClient {
           oi: Number(val.oi || 0) || null,
           tbq,
           tsq,
-          buy_pct: buyPct,
+          book_buy_pct: bookBuyPct,
           imb,
           depth: val.depth || null,
           lastTradeDate,
@@ -840,7 +847,16 @@ class UpstoxClient {
             const chgPct = prev > 0 ? ((ltp - prev) / prev) * 100 : null;
             const tbq = Number(mff?.tbq || 0);
             const tsq = Number(mff?.tsq || 0);
-            const { buyPct, imb } = computeOrderBookStats(tbq, tsq);
+            const { bookBuyPct, imb } = computeOrderBookStats(tbq, tsq);
+            const bestQuote = mff?.marketLevel?.bidAskQuote?.[0];
+            // Classify THIS snapshot's traded volume before batching (batches overwrite per symbol)
+            const aggr = this.aggressor.update(sym, {
+              ltp,
+              vtt: mff?.vtt !== undefined ? Number(mff.vtt) : null,
+              bid: bestQuote ? Number(bestQuote.bidP) : null,
+              ask: bestQuote ? Number(bestQuote.askP) : null,
+              ts: Number(ltpc.ltt) || Date.now(),
+            });
 
             const dayOhlc = mff?.marketOHLC?.ohlc?.find(o => o.interval === '1d');
             let depth = null;
@@ -864,7 +880,11 @@ class UpstoxClient {
               oi: mff?.oi || undefined,
               tbq,
               tsq,
-              buy_pct: buyPct !== null ? buyPct : undefined,
+              book_buy_pct: bookBuyPct !== null ? bookBuyPct : undefined,
+              aggr_buy_pct: aggr?.reliable ? aggr.buyPct : undefined,
+              aggr_delta: aggr?.reliable ? aggr.delta : undefined,
+              aggr_samples: aggr?.samples,
+              aggr_coverage_pct: aggr?.coveragePct,
               imb: imb !== null ? imb : undefined,
               depth,
             };

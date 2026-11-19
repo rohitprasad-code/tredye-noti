@@ -25,17 +25,33 @@ const { formatISTTime } = require('../market/hours');
  *   Last up candle (`close > open`) before a 1–3 candle impulse move whose min close
  *   breaks below the lowest low of the preceding 7 candles and moves at least
  *   `1.8 * avgCandleRange` from the OB candle's high.
+ *
+ * No lookahead: `avgCandleRange` is a TRAILING average of the `atrLookback` (default 14)
+ * candles before the OB candle, not the whole session. The original port averaged
+ * every candle in the array, so a 10:00 block's impulse threshold (and `str`) kept
+ * changing as later candles printed — blocks could appear/disappear intraday, and any
+ * backtest saw the future.
  */
 function detectOrderBlocks(candles = [], options = {}) {
   if (!Array.isArray(candles) || candles.length < 8) return [];
   const maxBlocks = options.maxBlocks ?? 4;
+  const atrLookback = Math.max(1, options.atrLookback ?? 14);
 
-  const avgRange =
-    candles.reduce((sum, c) => sum + (c[2] - c[3]), 0) / candles.length || 1;
+  // Prefix sums of candle ranges for O(1) trailing averages
+  const rangePrefix = [0];
+  for (const c of candles) rangePrefix.push(rangePrefix[rangePrefix.length - 1] + Math.max(0, c[2] - c[3]));
+  const trailingAvgRange = l => {
+    const start = Math.max(0, l - atrLookback);
+    const count = l - start;
+    const avg = count > 0 ? (rangePrefix[l] - rangePrefix[start]) / count : 0;
+    // Fallback for perfectly flat history: 0.05% of the OB candle's close
+    return avg > 0 ? avg : Math.max(1e-6, Math.abs(candles[l][4]) * 0.0005);
+  };
 
   const candidates = [];
   for (let l = 3; l < candles.length - 1; l++) {
     const r = candles[l];
+    const avgRange = trailingAvgRange(l);
     const prevWindow = candles.slice(Math.max(0, l - 6), l + 1);
     const nextWindow = candles.slice(l + 1, l + 4);
 

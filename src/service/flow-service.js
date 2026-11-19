@@ -6,7 +6,7 @@ const { loadDefaultConfig } = require('../config/defaults');
 const { getMarketStatus } = require('../market/hours');
 const { TredyeClient } = require('../tredye/client');
 const { UpstoxClient, normalizeBearerToken, decodeJwtClaims } = require('../upstox/client');
-const { scoreAndRankUniverse } = require('../engine/flow');
+const { scoreAndRankUniverse, trailingRangePct } = require('../engine/flow');
 const { locateActionableOB } = require('../engine/orderblocks');
 const {
   buildOrderBlockRealData,
@@ -15,6 +15,7 @@ const {
   compareOrderBlockCandidates,
 } = require('../engine/orderblock-ranking');
 const { SignalEngine } = require('../engine/signals');
+const { createOutcomeSeed, advanceOutcome, buildEdgeReport } = require('../engine/outcomes');
 const { FlowStore } = require('../store/db');
 const { createDashboardServer } = require('../server/server');
 const { createSampleDataset } = require('../../data/sample-fixture');
@@ -94,6 +95,8 @@ class TredyeFlowService {
       val: stock.val,
       vah: stock.vah,
       buyPct: stock.buy_pct,
+      buyPctSource: stock.buy_pct_src || (stock.buy_pct !== undefined && stock.buy_pct !== null ? 'TREDYE' : null),
+      bookBuyPct: stock.book_buy_pct ?? null,
       cvd: stock.cvd,
       tv: stock.tv ?? null,
       buildup: String(inferredBuildup).toUpperCase(),
@@ -251,6 +254,7 @@ class TredyeFlowService {
         bu: c.buildup || (isBull ? 'LONG BUILD-UP' : 'SHORT BUILD-UP'),
         flowSide: c.side || (isBull ? 'BULL' : 'BEAR'),
         flowAgree: dirFlow.agreeInDir,
+        flowTotal: dirFlow.total,
         flowCr: Number(c.rupeeFlowCr || 0),
         strengthScore: dirFlow.strengthInDir,
         setupScore: computeSetupScore(c, isBull),
@@ -433,10 +437,7 @@ class TredyeFlowService {
         }
       }
 
-      const ranked = scoreAndRankUniverse(stocks, this.config);
-      this.state.flowBySymbol = ranked.bySymbol;
-      this.state.sectors = ranked.sectors;
-
+      // Load intraday shard candles BEFORE scoring so each stock's ATR% is available
       const neededShards = new Set();
       for (const s of stocks) {
         if (s.sh !== undefined && s.sh !== null) {
@@ -461,6 +462,10 @@ class TredyeFlowService {
           }
         })
       );
+
+      const ranked = scoreAndRankUniverse(stocks, this.buildScoreOptions());
+      this.state.flowBySymbol = ranked.bySymbol;
+      this.state.sectors = ranked.sectors;
 
       this.state.obBySymbol.clear();
       const topCandidates = [];
@@ -513,14 +518,29 @@ class TredyeFlowService {
       const allTriggered = [...warmupAlerts, ...newAlerts];
       const savedAlerts = [];
 
+      const isLiveData = this.state.sourceMode === 'LIVE' || this.state.sourceMode === 'UPSTOX_LIVE';
       for (const alert of allTriggered) {
+        alert.sector = alert.sector || this.state.stocksBySymbol.get(alert.symbol)?.sector || null;
+        alert.sourceMode = this.state.sourceMode;
         const id = this.store.insertAlert(alert);
         const stored = { ...alert, id, reviewed: false };
         savedAlerts.push(stored);
 
+        // Outcome tracking only for live data — demo replays would pollute the edge stats
+        if (isLiveData) {
+          const seed = createOutcomeSeed(id, alert, this.state.sourceMode);
+          if (seed) this.store.insertOutcome(seed);
+        }
+
         if (!this.dryRun) {
           this.broadcast('alert', stored);
         }
+      }
+
+      try {
+        this.updateAlertOutcomes();
+      } catch (err) {
+        this.state.lastOutcomeError = err.message;
       }
 
       this.broadcast('state', this.getPublicState());
@@ -589,7 +609,21 @@ class TredyeFlowService {
       if (q.chg_pct !== undefined) s.chg_pct = q.chg_pct;
       else if (s.prev > 0) s.chg_pct = Number((((s.ltp - s.prev) / s.prev) * 100).toFixed(2));
       if (q.vwap > 0) s.vwap = q.vwap;
-      if (q.buy_pct !== null && q.buy_pct !== undefined) s.buy_pct = q.buy_pct;
+      // buy_pct must be TRADE-side (aggressor) share, never the resting-book ratio, or it
+      // duplicates `imb`. Prefer Upstox tick-classified aggressor %, once reliable; otherwise
+      // keep the trade-based buy_pct from Tredye. Book ratio is kept for display only.
+      const aggr = this.upstox?.aggressor?.get(sym);
+      if (aggr?.reliable) {
+        s.buy_pct = aggr.buyPct;
+        s.buy_pct_src = 'UPSTOX_AGGRESSOR';
+        s.aggr_coverage_pct = aggr.coveragePct;
+      } else if (q.aggr_buy_pct !== null && q.aggr_buy_pct !== undefined) {
+        s.buy_pct = q.aggr_buy_pct;
+        s.buy_pct_src = 'UPSTOX_AGGRESSOR';
+      } else if (s.buy_pct !== undefined && s.buy_pct !== null && !s.buy_pct_src) {
+        s.buy_pct_src = 'TREDYE';
+      }
+      if (q.book_buy_pct !== null && q.book_buy_pct !== undefined) s.book_buy_pct = q.book_buy_pct;
       if (q.imb !== null && q.imb !== undefined) s.imb = q.imb;
       if (q.oi > 0) s.oi = q.oi;
       if (q.depth) {
@@ -604,10 +638,62 @@ class TredyeFlowService {
     return updated;
   }
 
+  /**
+   * Advances every still-TRACKING alert outcome with the latest candles + LTP.
+   * Runs each poll; finalizes rows once their session has closed.
+   */
+  updateAlertOutcomes(nowMs = Date.now()) {
+    const open = this.store.listTrackingOutcomes();
+    if (!open.length) return 0;
+    const isLiveData = this.state.sourceMode === 'LIVE' || this.state.sourceMode === 'UPSTOX_LIVE';
+    const pollMs = Math.max(15, Number(this.config.pollIntervalSec || 60)) * 1000;
+    let changed = 0;
+    for (const row of open) {
+      const detail = this.state.detailBySymbol.get(row.symbol);
+      const stock = this.state.stocksBySymbol.get(row.symbol);
+      const next = advanceOutcome(row, {
+        candles: isLiveData ? detail?.candles : [],
+        candleMin: detail?.candle_min || 3,
+        ltp: isLiveData ? stock?.ltp : null,
+        nowMs,
+        lateToleranceMs: Math.max(150000, pollMs * 2.5),
+      });
+      if (JSON.stringify(next) !== JSON.stringify(row)) {
+        this.store.updateOutcome(next);
+        changed++;
+      }
+    }
+    return changed;
+  }
+
+  getEdgeReport({ days = 30, includeDemo = false } = {}) {
+    const d = Math.max(1, Math.min(365, Number(days) || 30));
+    const rows = this.store.listOutcomeRows(Date.now() - d * 86400000, { includeDemo });
+    return {
+      days: d,
+      generatedAt: Date.now(),
+      ...buildEdgeReport(rows),
+      recent: rows.slice(0, 60),
+    };
+  }
+
+  /**
+   * Scoring options = terminal config + each stock's own volatility unit
+   * (avg 3m candle range % over the trailing 14 candles) for VWAP normalization.
+   */
+  buildScoreOptions() {
+    const volPctBySymbol = {};
+    for (const [sym, detail] of this.state.detailBySymbol) {
+      const v = trailingRangePct(detail?.candles, 14);
+      if (v) volPctBySymbol[sym] = v;
+    }
+    return { ...this.config, volPctBySymbol };
+  }
+
   recomputeFromCurrentStocks() {
     const stocks = [...this.state.stocksBySymbol.values()];
     if (stocks.length === 0) return;
-    const ranked = scoreAndRankUniverse(stocks, this.config);
+    const ranked = scoreAndRankUniverse(stocks, this.buildScoreOptions());
     this.state.flowBySymbol = ranked.bySymbol;
     this.state.sectors = ranked.sectors;
     this.state.topBull = ranked.topBull.map(({ stock, flow }) => this.enrichCardItem(stock, flow));

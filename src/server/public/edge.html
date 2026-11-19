@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <script>(function(){try{var m=/(?:^|;\s*)ob_theme=(light|dark)(?:;|$)/.exec(document.cookie);var ov=m?m[1]:null;var mqL=window.matchMedia&&window.matchMedia('(prefers-color-scheme: light)');var mqD=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)');var sys=(mqL&&mqL.matches)?'light':(mqD&&mqD.matches)?'dark':'dark';var t=ov||sys;var r=document.documentElement;r.setAttribute('data-theme',t);r.style.colorScheme=t;var mc=document.querySelector('meta[name="color-scheme"]');if(mc)mc.content=ov||'light dark';}catch(e){}})();</script>
+  <title>Edge Report · Alert Outcomes</title>
+  <link rel="stylesheet" href="/vendor/fonts.css">
+  <link rel="stylesheet" href="/theme-ob.css">
+  <link rel="stylesheet" href="/static/settings/settings.css">
+  <script defer src="/nav-rail.js"></script>
+  <style>
+    .edge-controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .edge-controls select, .edge-controls label { font: inherit; color: var(--s-ink); }
+    .edge-controls select { background: var(--s-raised); border: 1px solid var(--s-border); border-radius: 6px; padding: 4px 8px; }
+    .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
+    .kpi { background: var(--s-raised); border: 1px solid var(--s-border); border-radius: 8px; padding: 10px 12px; }
+    .kpi .k { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--s-muted); }
+    .kpi .v { font-family: var(--f-num, monospace); font-size: 20px; margin-top: 4px; color: var(--s-ink); }
+    .edge-table-wrap { overflow-x: auto; }
+    table.edge { width: 100%; border-collapse: collapse; font-size: 13px; }
+    table.edge th, table.edge td { padding: 6px 8px; border-bottom: 1px solid var(--s-border); text-align: right; white-space: nowrap; }
+    table.edge th:first-child, table.edge td:first-child { text-align: left; }
+    table.edge th { font-weight: 600; color: var(--s-muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+    table.edge td { font-family: var(--f-num, monospace); color: var(--s-ink); }
+    table.edge tr.thin td { opacity: .5; }
+    .pos { color: var(--s-accent) !important; }
+    .neg { color: var(--s-err) !important; }
+    body.edge-page .settings-main { max-width: 1240px; width: 100%; }
+    .grid2 { display: grid; grid-template-columns: 1fr; gap: 16px; }
+    .muted { color: var(--s-muted); }
+  </style>
+</head>
+<body class="has-ob-rail settings-page edge-page">
+  <main class="settings-main">
+    <header class="settings-header">
+      <div class="settings-title-wrap">
+        <h1>Edge Report</h1>
+        <span id="edgeStatus" class="status-pill">Loading…</span>
+      </div>
+      <div class="edge-controls">
+        <label for="edgeDays" class="muted">Window</label>
+        <select id="edgeDays">
+          <option value="7">7 days</option>
+          <option value="30" selected>30 days</option>
+          <option value="90">90 days</option>
+          <option value="365">1 year</option>
+        </select>
+        <a href="/app/orderblock" class="btn-ui">← Order Block</a>
+      </div>
+    </header>
+
+    <section class="card-section">
+      <p class="help-text">
+        What price did <strong>after</strong> each live alert. Returns are <strong>directional</strong>
+        (positive = moved the way the alert pointed). MFE/MAE = best/worst excursion before the close.
+        "T1 first" vs "Stop first" counts only alerts with valid reference levels; if both traded in the same
+        candle the stop is counted first. Rows with fewer than <span id="minSample">20</span> alerts are faded —
+        too few to trust. Research only; not trading advice.
+      </p>
+      <div class="kpis" id="kpis"></div>
+    </section>
+
+    <div class="grid2" id="groups"></div>
+
+    <section class="card-section">
+      <div class="card-head"><h2>Recent alerts</h2></div>
+      <div class="edge-table-wrap"><table class="edge" id="recent"></table></div>
+    </section>
+  </main>
+
+  <script>
+  (function () {
+    const $ = id => document.getElementById(id);
+    const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const fmt = (v, d = 2, suffix = '%') => (v === null || v === undefined || Number.isNaN(Number(v)) ? '—' : `${Number(v) > 0 ? '+' : ''}${Number(v).toFixed(d)}${suffix}`);
+    const plain = (v, suffix = '%') => (v === null || v === undefined ? '—' : `${Number(v).toFixed(1)}${suffix}`);
+    const cls = v => (v === null || v === undefined ? '' : Number(v) > 0 ? 'pos' : Number(v) < 0 ? 'neg' : '');
+    const istTime = ms => new Date(ms + 5.5 * 3600e3).toISOString().replace('T', ' ').slice(5, 16);
+
+    const GROUPS = [
+      ['byAgree', 'By confluence (agree / checks)'],
+      ['byObStatus', 'By order-block status'],
+      ['byStrength', 'By strength score'],
+      ['byTimeOfDay', 'By time of day (IST)'],
+      ['byType', 'By alert type'],
+      ['bySide', 'By side'],
+      ['bySector', 'By sector'],
+    ];
+
+    function groupTable(rows, minSample) {
+      const head = '<tr><th>Group</th><th>n</th><th>Win %</th><th>Avg close</th><th>Median</th><th>Avg 15m</th><th>Avg 60m</th><th>MFE</th><th>MAE</th><th>T1 first</th><th>Stop first</th></tr>';
+      const body = rows.map(r => `<tr class="${r.n < minSample ? 'thin' : ''}">
+        <td>${esc(r.key)}</td><td>${r.n}</td><td>${plain(r.winRatePct)}</td>
+        <td class="${cls(r.avgRetClose)}">${fmt(r.avgRetClose)}</td>
+        <td class="${cls(r.medianRetClose)}">${fmt(r.medianRetClose)}</td>
+        <td class="${cls(r.avgRet15)}">${fmt(r.avgRet15)}</td>
+        <td class="${cls(r.avgRet60)}">${fmt(r.avgRet60)}</td>
+        <td>${fmt(r.avgMfe)}</td><td>${r.avgMae === null ? '—' : '−' + Number(r.avgMae).toFixed(2) + '%'}</td>
+        <td>${plain(r.t1FirstPct)}</td><td>${plain(r.stopFirstPct)}</td></tr>`).join('');
+      return `<table class="edge">${head}${body || '<tr><td colspan="11" class="muted">No data yet</td></tr>'}</table>`;
+    }
+
+    function render(rep) {
+      const o = rep.overall;
+      $('minSample').textContent = rep.minSample;
+      $('edgeStatus').textContent = `${rep.counts.done} done · ${rep.counts.tracking} tracking · ${rep.counts.incomplete} incomplete`;
+      const kpi = (k, v, c = '') => `<div class="kpi"><div class="k">${k}</div><div class="v ${c}">${v}</div></div>`;
+      $('kpis').innerHTML = [
+        kpi('Alerts', o.n),
+        kpi('Win rate (close)', plain(o.winRatePct)),
+        kpi('Avg ret → close', fmt(o.avgRetClose), cls(o.avgRetClose)),
+        kpi('Avg ret 15m', fmt(o.avgRet15), cls(o.avgRet15)),
+        kpi('Avg MFE', fmt(o.avgMfe)),
+        kpi('Avg MAE', o.avgMae === null ? '—' : '−' + Number(o.avgMae).toFixed(2) + '%'),
+        kpi('T1 before stop', plain(o.t1FirstPct)),
+        kpi('Stop before T1', plain(o.stopFirstPct)),
+      ].join('');
+
+      $('groups').innerHTML = GROUPS.map(([key, title]) => `
+        <section class="card-section"><div class="card-head"><h2>${title}</h2></div>
+        <div class="edge-table-wrap">${groupTable(rep[key] || [], rep.minSample)}</div></section>`).join('');
+
+      const head = '<tr><th>Time (IST)</th><th>Symbol</th><th>Type</th><th>Side</th><th>Agree</th><th>OB</th><th>Entry</th><th>15m</th><th>60m</th><th>Close</th><th>MFE</th><th>MAE</th><th>First hit</th><th>Status</th></tr>';
+      const body = (rep.recent || []).map(r => `<tr>
+        <td>${istTime(r.created_at)}</td><td>${esc(r.symbol)}</td><td>${esc(r.type)}</td><td>${esc(r.side)}</td>
+        <td>${r.agree ?? '—'}/${r.total_checks ?? '—'}</td><td>${esc(r.ob_status || '—')}</td>
+        <td>${Number(r.entry_price).toFixed(2)}</td>
+        <td class="${cls(r.ret_15m)}">${fmt(r.ret_15m)}</td><td class="${cls(r.ret_60m)}">${fmt(r.ret_60m)}</td>
+        <td class="${cls(r.ret_close)}">${fmt(r.ret_close)}</td>
+        <td>${fmt(r.mfe_pct)}</td><td>${r.mae_pct === null ? '—' : '−' + Number(r.mae_pct).toFixed(2) + '%'}</td>
+        <td>${esc(r.first_hit || '—')}</td><td>${esc(r.status)}</td></tr>`).join('');
+      $('recent').innerHTML = head + (body || '<tr><td colspan="14" class="muted">No live alerts tracked yet. Outcomes are recorded for alerts fired while live data (Tredye / Upstox) is connected.</td></tr>');
+    }
+
+    async function load() {
+      const days = $('edgeDays').value;
+      try {
+        const res = await fetch(`/api/edge-report?days=${days}`, { cache: 'no-store' });
+        render(await res.json());
+      } catch (e) {
+        $('edgeStatus').textContent = 'Failed to load';
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      $('edgeDays').addEventListener('change', load);
+      load();
+      // Auto-refresh only during NSE hours (Mon–Fri 09:15–15:35 IST); off-hours data doesn't change
+      const marketOpen = () => {
+        const d = new Date(Date.now() + 5.5 * 3600e3);
+        const day = d.getUTCDay(), m = d.getUTCHours() * 60 + d.getUTCMinutes();
+        return day >= 1 && day <= 5 && m >= 555 && m <= 935;
+      };
+      setInterval(() => { if (marketOpen() && !document.hidden) load(); }, 60000);
+    });
+  })();
+  </script>
+</body>
+</html>
